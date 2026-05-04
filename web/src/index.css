@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { font-family: ui-sans-serif, system-ui, sans-serif; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }

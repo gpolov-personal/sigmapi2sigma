@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+web/dist/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Environment-specific (in case you ever add one)
+.env
+.env.local
+
+# Runtime data lives outside the repo at ~/.sigmapi2sigma/, but exclude
+# any accidental in-repo writes just in case.
+.sigmapi2sigma/
