@@ -178,3 +178,14 @@ export const PROJECT_PALETTE = [
   "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
   "#8b5cf6", "#a855f7", "#d946ef", "#ec4899",
 ];
+
+export interface SavedSessionMeta {
+  savedAt: string;
+  lastSeenAt: string;
+}
+export interface SavedTmuxFile {
+  version: 1;
+  ts: string;
+  sessions: TmuxSession[];
+  meta: Record<string, SavedSessionMeta>;
+}
