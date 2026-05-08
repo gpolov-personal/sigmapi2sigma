@@ -4,6 +4,11 @@ import { DATA_DIR } from "./pathEncoding.js";
 
 export const TMUX_BINDINGS_FILE = path.join(DATA_DIR, "tmux-bindings.jsonl");
 
+function parseTs(s: string): number {
+  const n = Date.parse(s);
+  return Number.isNaN(n) ? 0 : n;  // Unparseable timestamps lose the newest-wins race.
+}
+
 export interface TmuxBinding {
   ts: string;
   claudeSessionId: string;
@@ -54,7 +59,8 @@ async function readBindingsFromSnapshots(): Promise<TmuxBinding[]> {
     try {
       const txt = await fs.readFile(path.join(dir, f), "utf8");
       const parsed = JSON.parse(txt);
-      const ts = typeof parsed.ts === "string" ? parsed.ts : new Date().toISOString();
+      if (typeof parsed.ts !== "string") continue;  // Skip malformed snapshots so they can't outrank good data.
+      const ts = parsed.ts;
       for (const s of parsed.sessions ?? []) {
         for (const w of s.windows ?? []) {
           for (const p of w.panes ?? []) {
@@ -85,7 +91,7 @@ export async function getLastLocationsBySessionId(ids: Set<string>): Promise<Map
   for (const b of all) {
     if (!ids.has(b.claudeSessionId)) continue;
     const cur = newest.get(b.claudeSessionId);
-    if (!cur || cur.ts < b.ts) newest.set(b.claudeSessionId, b);
+    if (!cur || parseTs(cur.ts) < parseTs(b.ts)) newest.set(b.claudeSessionId, b);
   }
   return newest;
 }
