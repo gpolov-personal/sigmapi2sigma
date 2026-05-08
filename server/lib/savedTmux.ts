@@ -3,6 +3,10 @@ import { DATA_DIR } from "./pathEncoding.js";
 import { readJsonSafe, writeJsonAtomic } from "./dataStore.js";
 import type { TmuxSession } from "./tmux.js";
 
+// Read-modify-write functions below assume a single-writer environment, matching
+// the rest of ~/.sigmapi2sigma/*.json stores. Concurrent pin/forget calls can
+// race; we accept this trade-off rather than introducing a mutex layer.
+
 export const SAVED_TMUX_FILE = path.join(DATA_DIR, "saved-tmux.json");
 
 export interface SavedSessionMeta {
