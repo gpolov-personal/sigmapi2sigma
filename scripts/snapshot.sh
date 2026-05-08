@@ -126,6 +126,23 @@ printf '%s\n' "$final" >"$tmp"
 NORMALIZE='del(.ts, .tmuxVersion)
   | .sessions |= map(.windows |= map(.name = ""))
   | walk(if type=="object" and has("pid") then del(.pid) else . end)'
+
+# Append every observed (claudeSessionId, tmuxSession, window, pane, cwd) tuple
+# to ~/.sigmapi2sigma/tmux-bindings.jsonl. Append-only; dedup happens at read time.
+# Appended even when the diff-guard below skips the rotation, so the log stays
+# fresh during steady-state work.
+BINDINGS_FILE="$DATA_DIR/tmux-bindings.jsonl"
+{
+  jq -c --arg ts "$TS" '
+    .sessions[] as $s
+    | $s.windows[] as $w
+    | $w.panes[]
+    | select(.claudeSessionId != null)
+    | {ts: $ts, claudeSessionId: .claudeSessionId, tmuxSession: $s.name,
+       windowIndex: $w.index, paneIndex: .index, cwd: .cwd}
+  ' "$tmp"
+} >> "$BINDINGS_FILE" 2>/dev/null || true
+
 if [[ -f "$SNAP_DIR/latest.json" ]]; then
   norm_new=$(jq -S "$NORMALIZE" "$tmp" 2>/dev/null || true)
   norm_old=$(jq -S "$NORMALIZE" "$SNAP_DIR/latest.json" 2>/dev/null || true)
