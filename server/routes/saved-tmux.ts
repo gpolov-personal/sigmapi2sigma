@@ -78,7 +78,7 @@ savedTmuxRouter.post("/saved-tmux/:name/restore", async (req, res) => {
   const force = !!(req.body ?? {}).force;
   // Verify the session is actually in the saved file before invoking restore.sh
   // (better error than letting the script silently no-op via --only mismatch).
-  const file = await (await import("../lib/savedTmux.js")).readSavedTmux();
+  const file = await readSavedTmux();
   if (!file.sessions.some(s => s.name === name)) {
     return res.status(404).json({ ok: false, error: `no saved session "${name}"` });
   }
