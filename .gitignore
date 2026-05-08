@@ -22,3 +22,6 @@ Thumbs.db
 # Runtime data lives outside the repo at ~/.sigmapi2sigma/, but exclude
 # any accidental in-repo writes just in case.
 .sigmapi2sigma/
+
+# Local worktrees for parallel feature development
+.worktrees/
