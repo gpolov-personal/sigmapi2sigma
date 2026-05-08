@@ -144,6 +144,15 @@ export function TmuxMap() {
     await refresh();
   }
 
+  async function saveForLater(name: string) {
+    try {
+      await postJSON("/api/saved-tmux/pin", { sessionName: name });
+      await refresh();
+    } catch (e: any) {
+      setRestoreLog(`Save failed: ${e.message ?? e}`);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className={`border rounded p-3 text-sm flex items-center gap-4 ${
@@ -316,20 +325,30 @@ export function TmuxMap() {
                 </button>
                 {sessionState !== "alive" && (
                   <>
+                    {!saved?.sessions.some(x => x.name === s.name) && (
+                      <button
+                        onClick={() => saveForLater(s.name)}
+                        className="text-xs px-2 py-0.5 bg-amber-700 rounded hover:bg-amber-600"
+                        title="Pin this session into ~/.sigmapi2sigma/saved-tmux.json so it survives snapshot rotation"
+                      >📌 Save for later</button>
+                    )}
                     <button
                       onClick={() => restoreOnly(s.name, false)}
                       className="text-xs px-2 py-0.5 bg-blue-600 rounded hover:bg-blue-500"
-                    >
-                      Restore this session
-                    </button>
+                    >Restore this session</button>
                     <button
                       onClick={() => restoreOnly(s.name, true)}
                       className="text-xs px-2 py-0.5 bg-red-700 rounded hover:bg-red-600"
                       title="Kill any existing session with this name first"
-                    >
-                      Restore --force
-                    </button>
+                    >Restore --force</button>
                   </>
+                )}
+                {sessionState === "alive" && !saved?.sessions.some(x => x.name === s.name) && (
+                  <button
+                    onClick={() => saveForLater(s.name)}
+                    className="text-xs px-2 py-0.5 bg-amber-700 rounded hover:bg-amber-600"
+                    title="Bookmark this session before killing it — survives snapshot rotation"
+                  >📌 Save for later</button>
                 )}
               </div>
             </div>
