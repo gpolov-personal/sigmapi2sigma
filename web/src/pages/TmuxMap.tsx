@@ -16,12 +16,12 @@ export function TmuxMap() {
   async function refresh() {
     setLoading(true);
     try {
-      const [tmuxData, savedData] = await Promise.all([
+      const [tmuxR, savedR] = await Promise.allSettled([
         getJSON<TmuxResponse>("/api/tmux"),
         getJSON<SavedTmuxFile>("/api/saved-tmux"),
       ]);
-      setData(tmuxData);
-      setSaved(savedData);
+      if (tmuxR.status === "fulfilled") setData(tmuxR.value);
+      if (savedR.status === "fulfilled") setSaved(savedR.value);
     } finally { setLoading(false); }
   }
   useEffect(() => { refresh(); const id = setInterval(refresh, 60_000); return () => clearInterval(id); }, []);
