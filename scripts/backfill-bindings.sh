@@ -25,7 +25,7 @@ for f in "$SNAP_DIR"/latest.json "$SNAP_DIR"/prev.json "$SNAP_DIR"/prev*.json; d
   if [[ -n "$added" ]]; then
     n=$(wc -l <<<"$added")
     count=$((count + n))
-    printf '%s\n' "$added" >> "$BINDINGS_FILE"
+    printf '%s' "$added" >> "$BINDINGS_FILE"
   fi
 done
 
