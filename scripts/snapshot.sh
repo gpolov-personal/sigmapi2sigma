@@ -141,7 +141,7 @@ BINDINGS_FILE="$DATA_DIR/tmux-bindings.jsonl"
     | {ts: $ts, claudeSessionId: .claudeSessionId, tmuxSession: $s.name,
        windowIndex: $w.index, paneIndex: .index, cwd: .cwd}
   ' "$tmp"
-} >> "$BINDINGS_FILE" 2>/dev/null || true
+} >> "$BINDINGS_FILE" || true
 
 if [[ -f "$SNAP_DIR/latest.json" ]]; then
   norm_new=$(jq -S "$NORMALIZE" "$tmp" 2>/dev/null || true)
