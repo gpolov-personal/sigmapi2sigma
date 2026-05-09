@@ -4,12 +4,27 @@ import { copy, relativeTime, trunc } from "../utils";
 import { ProjectAssignmentMenu } from "../components/ProjectAssignmentMenu";
 import { BrainCircuit } from "lucide-react";
 
+// Persisted fold state — keys are namespaced so section/saved/live can coexist.
+const COLLAPSE_LS = "tmuxMap:collapsed";
+const KEY_SAVED_SECTION = "section:saved";
+const keyForSavedEntry  = (name: string) => `saved:${name}`;
+const keyForLiveSession = (name: string) => `live:${name}`;
+
 export function TmuxMap() {
   const [data, setData] = useState<TmuxResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [scrollback, setScrollback] = useState<{ paneId: string; text: string } | null>(null);
   const [cmdModal, setCmdModal] = useState<{ paneId: string; entries: ShellEntry[] } | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(COLLAPSE_LS);
+      return new Set(raw ? JSON.parse(raw) : []);
+    } catch { return new Set(); }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(COLLAPSE_LS, JSON.stringify([...collapsed])); }
+    catch { /* full quota / private mode → ignore */ }
+  }, [collapsed]);
   const [restoreLog, setRestoreLog] = useState<string | null>(null);
   const [saved, setSaved] = useState<SavedTmuxFile | null>(null);
 
@@ -89,7 +104,13 @@ export function TmuxMap() {
     });
   }
   function foldAll() {
-    setCollapsed(new Set((sessions as TmuxSession[]).map(s => s.name)));
+    const keys: string[] = [];
+    if (saved && saved.sessions.length > 0) {
+      keys.push(KEY_SAVED_SECTION);
+      for (const s of saved.sessions) keys.push(keyForSavedEntry(s.name));
+    }
+    for (const s of (sessions as TmuxSession[])) keys.push(keyForLiveSession(s.name));
+    setCollapsed(new Set(keys));
   }
   function unfoldAll() {
     setCollapsed(new Set());
@@ -216,9 +237,14 @@ export function TmuxMap() {
       {saved && saved.sessions.length > 0 && (
         <div className="border border-amber-700/60 bg-amber-950/20 rounded">
           <div className="px-4 py-2 font-semibold border-b border-amber-800/60 flex items-center gap-3">
+            <button
+              onClick={() => toggle(KEY_SAVED_SECTION)}
+              className="text-slate-400 hover:text-white w-4"
+            >{collapsed.has(KEY_SAVED_SECTION) ? "▶" : "▼"}</button>
             <span className="text-amber-300">📌 Saved for Later</span>
             <span className="text-xs text-slate-400">{saved.sessions.length} pinned · survives snapshot rotation</span>
           </div>
+          {!collapsed.has(KEY_SAVED_SECTION) && (
           <div className="divide-y divide-amber-900/40">
             {saved.sessions.map(s => {
               const m = saved.meta[s.name];
@@ -227,6 +253,10 @@ export function TmuxMap() {
               return (
                 <div key={s.name} className="px-4 py-2">
                   <div className="flex items-center gap-3 mb-2">
+                    <button
+                      onClick={() => toggle(keyForSavedEntry(s.name))}
+                      className="text-slate-400 hover:text-white w-4"
+                    >{collapsed.has(keyForSavedEntry(s.name)) ? "▶" : "▼"}</button>
                     <span className="font-semibold">{s.name}</span>
                     <span className="text-xs px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-200">saved</span>
                     {aliveNow && (
@@ -262,20 +292,23 @@ export function TmuxMap() {
                       >Forget</button>
                     </div>
                   </div>
-                  <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(22rem, 1fr))" }}>
-                    {s.windows.flatMap(w => w.panes.map(p => (
-                      <PaneCard
-                        key={`${w.index}.${p.index}.${p.paneId}`}
-                        pane={p}
-                        state="unknown"
-                        onCommands={() => openCommands(p.paneId)}
-                      />
-                    )))}
-                  </div>
+                  {!collapsed.has(keyForSavedEntry(s.name)) && (
+                    <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(22rem, 1fr))" }}>
+                      {s.windows.flatMap(w => w.panes.map(p => (
+                        <PaneCard
+                          key={`${w.index}.${p.index}.${p.paneId}`}
+                          pane={p}
+                          state="unknown"
+                          onCommands={() => openCommands(p.paneId)}
+                        />
+                      )))}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
+          )}
         </div>
       )}
 
@@ -296,11 +329,11 @@ export function TmuxMap() {
           sessionState === "alive"   ? "bg-green-900/40 text-green-300" :
           sessionState === "dead"    ? "bg-red-900/40 text-red-300" :
                                        "bg-slate-800 text-slate-400";
-        const isCollapsed = collapsed.has(s.name);
+        const isCollapsed = collapsed.has(keyForLiveSession(s.name));
         return (
           <div key={s.name} className={`border rounded bg-slate-900/30 ${sessionBorder}`}>
             <div className="px-4 py-2 font-semibold border-b border-slate-800 flex items-center gap-3">
-              <button onClick={() => toggle(s.name)} className="text-slate-400 hover:text-white w-4">
+              <button onClick={() => toggle(keyForLiveSession(s.name))} className="text-slate-400 hover:text-white w-4">
                 {isCollapsed ? "▶" : "▼"}
               </button>
               <span>{s.name}</span>
