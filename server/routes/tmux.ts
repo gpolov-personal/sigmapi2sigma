@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { buildTmuxTree, capturePane, createDetachedSession, isTmuxRunning } from "../lib/tmux.js";
 import { DATA_DIR } from "../lib/pathEncoding.js";
+import { expandHome } from "../lib/paths.js";
 
 export const tmuxRouter = Router();
 
@@ -35,7 +36,8 @@ tmuxRouter.post("/tmux/sessions", async (req, res) => {
     return res.status(400).json({ error: "cwd must be a string ≤500 chars" });
   }
   try {
-    await createDetachedSession(name, typeof cwd === "string" && cwd.length > 0 ? cwd : undefined);
+    const expanded = typeof cwd === "string" && cwd.length > 0 ? expandHome(cwd) : undefined;
+    await createDetachedSession(name, expanded);
     res.json({ ok: true, name });
   } catch (e: any) {
     if (String(e?.message ?? "").includes("already exists")) {

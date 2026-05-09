@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { DATA_DIR } from "../lib/pathEncoding.js";
+import { expandHome } from "../lib/paths.js";
 
 const pexec = promisify(execFile);
 const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
@@ -95,7 +96,7 @@ snapshotsRouter.post("/resume", async (req, res) => {
     await pexec("tmux", [
       "new-session", "-d",
       "-s", tmuxSessionName,
-      "-c", cwd,
+      "-c", expandHome(cwd),
       claudeCmd,
     ]);
     res.json({ ok: true });
