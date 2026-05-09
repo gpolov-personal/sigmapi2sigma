@@ -1,18 +1,27 @@
-# Tmux Map: Folding + Smart Force-Confirmation Design
+# Tmux Map UX Hardening: Folding + Force-Confirm + Working-Dir Fixes
 
 **Date:** 2026-05-09
 **Status:** Approved for implementation planning
-**Affected files:** `web/src/pages/TmuxMap.tsx` only (frontend)
+**Affected files:**
+- `web/src/pages/TmuxMap.tsx` (folding, confirm modal)
+- `web/src/pages/Projects.tsx` (mismatch warning)
+- `server/lib/paths.ts` (new — tilde expansion helper)
+- `server/routes/tmux.ts` (apply tilde expansion + return existing-session cwds)
+- `server/routes/snapshots.ts` (apply tilde expansion to /resume)
 
 ## Problem
 
-Two UX gaps in the recently merged Save-for-Later UI on the Tmux Map page:
+Four UX/correctness gaps observed on the Tmux Map and Projects pages:
 
 1. **The `📌 Saved for Later` section can't be collapsed.** Every other session row in the live tree has a `▶/▼` caret to fold the pane grid. The saved section header has no caret, and saved entries can't be folded individually either. With even a few pinned sessions, the section dominates the page.
 
 2. **`Restore --force` can silently destroy a running tmux session.** The `--force` flag tells `restore.sh` to `tmux kill-session -t NAME` before recreating from snapshot. If the user has the session running with active panes (cwds, Claude conversations, scrollback), all of that is lost without any prompt. There are two `Restore --force` buttons with this behavior:
    - In the Saved-for-Later section, on each saved entry
    - In the main live tree, on dead-session row headers
+
+3. **A project's `working_dir` containing a tilde (`~/foo`) silently lands at `$HOME`.** `tmux new-session -c "~/foo"` passes the literal string to `chdir()`, which doesn't expand the tilde. Tmux falls back to `$HOME` with no warning. Reproduced empirically: `tmux new-session -d -s X -c '~/foo' && tmux list-panes -t X -F '#{pane_current_path}'` → `/home/dsu`. Affects both `POST /api/tmux/sessions` (Project drawer's Assign button) and `POST /api/resume` (Sessions drawer's "Resume in new tmux" button).
+
+4. **Re-clicking Assign on an existing session ignores the new `working_dir`.** Tmux can't change the cwd of an existing session. Today, `smartAssign()` in `Projects.tsx` returns "reusing it" when the session already exists, dropping the requested cwd silently. Users edit the working_dir, click Assign again, and nothing happens — but the UI gives no signal that the existing session's cwd is wrong.
 
 ## Goals
 
@@ -21,19 +30,31 @@ Two UX gaps in the recently merged Save-for-Later UI on the Tmux Map page:
 - Persist fold state across page refreshes
 - Add a confirmation modal for `Restore --force` — but only when the action would actually destroy a live session
 - Reuse one modal component for both `Restore --force` paths
+- Expand `~/...` cwds server-side before passing to tmux, so working_dirs that start with a tilde just work
+- Surface a yellow warning under the Assign button when the existing tmux session's panes don't sit in the project's working_dir, with concrete fix instructions
 
 ## Non-goals
 
-- No backend / API changes
+- No backend / API changes for folding (frontend only) — but tilde expansion and existing-session cwd reporting do require small backend additions
 - No fold/persistence for the live-tree pane-card state (only at session and section level)
 - No scope change to `Forget` (already has a `confirm()` prompt)
 - No retroactive UX changes to other tabs (Sessions, Pomodoro, etc.)
+- No automatic kill+recreate on cwd mismatch (warning-only; the destructive path is left to the user explicitly)
+- No `~user/...` expansion (only `~` and `~/...` — POSIX user-tilde expansion needs `/etc/passwd` parsing and is rarely useful here)
+- No retroactive expansion of stored `working_dir` in `projects.json` — storage stays literal so the path is portable across machines, expansion happens only at the moment we hand it to tmux
 
 ## Architecture overview
 
-All changes live in `web/src/pages/TmuxMap.tsx`. The existing `collapsed: Set<string>` state is reused for fold tracking with namespaced keys; a new `forceConfirm: ForceContext | null` state drives a single shared modal component, used by both `Restore --force` call sites. Persistence is a `useEffect` writing the collapsed Set to `localStorage`.
+Four independent improvements split across frontend and backend:
 
-Net change: ~120-150 lines of TSX, plus one inline modal component (~40 lines) defined alongside the existing `ScrollbackModal` in the same file.
+| Component | Where | Lines (approx) |
+|---|---|---|
+| A. Fold + persistence | `web/src/pages/TmuxMap.tsx` | ~80 |
+| B. Force-confirm modal | `web/src/pages/TmuxMap.tsx` (modal alongside `ScrollbackModal`) | ~70 |
+| C. Tilde expansion | new `server/lib/paths.ts` + 2 route call sites | ~25 |
+| D. Cwd-mismatch warning | `server/routes/tmux.ts` enriches 409 + `web/src/pages/Projects.tsx` renders | ~50 |
+
+A and B touch only `TmuxMap.tsx`. C and D touch backend + `Projects.tsx`. No cross-component coupling — they can be implemented and verified independently. Implementation order is suggested as A → B → C → D so the lightest changes land first, but the dependency graph is empty.
 
 ## Component A — Folding (section + per-entry, persisted)
 
@@ -271,11 +292,184 @@ If snapshot data isn't available (`data.snapshot === null`), the dead-row force-
    [refresh() refreshes the live tree]
 ```
 
+## Component C — Tilde expansion (server-side)
+
+### Helper
+
+New file `server/lib/paths.ts`:
+
+```typescript
+import os from "node:os";
+
+/**
+ * Expand a leading `~` or `~/` to the user's home directory.
+ * Other paths are returned unchanged. Does NOT handle `~user/...` —
+ * POSIX user-tilde expansion is out of scope and rarely useful here.
+ */
+export function expandHome(p: string): string {
+  if (p === "~") return os.homedir();
+  if (p.startsWith("~/")) return os.homedir() + p.slice(1);
+  return p;
+}
+```
+
+### Call sites
+
+**1. `server/routes/tmux.ts`** — `POST /api/tmux/sessions`. Currently:
+
+```typescript
+await createDetachedSession(name, typeof cwd === "string" && cwd.length > 0 ? cwd : undefined);
+```
+
+Change to expand before passing through:
+
+```typescript
+const expanded = typeof cwd === "string" && cwd.length > 0 ? expandHome(cwd) : undefined;
+await createDetachedSession(name, expanded);
+```
+
+**2. `server/routes/snapshots.ts`** — `POST /api/resume`. Currently:
+
+```typescript
+await pexec("tmux", [
+  "new-session", "-d",
+  "-s", tmuxSessionName,
+  "-c", cwd,
+  claudeCmd,
+]);
+```
+
+Change `-c` arg to expanded form:
+
+```typescript
+await pexec("tmux", [
+  "new-session", "-d",
+  "-s", tmuxSessionName,
+  "-c", expandHome(cwd),
+  claudeCmd,
+]);
+```
+
+(`cwd` is the request-body field, after the existing 400-validation has already enforced it as a non-empty string.)
+
+### Storage stays literal
+
+The user's `project.working_dir` keeps the form they typed (`~/foo`). Expansion happens only at the moment we hand the value to tmux. No migration of existing data needed.
+
+### Verification
+
+```bash
+# Before fix:
+tmux new-session -d -s _t -c '~/pProjects/sigmapi2sigma' && tmux list-panes -t _t -F '#{pane_current_path}'
+#  → /home/dsu          (wrong)
+tmux kill-session -t _t
+
+# After fix, exercising the API:
+curl -s -X POST -H 'content-type: application/json' \
+  -d '{"name":"_t","cwd":"~/pProjects/sigmapi2sigma"}' \
+  http://127.0.0.1:5174/api/tmux/sessions
+tmux list-panes -t _t -F '#{pane_current_path}'
+#  → /home/dsu/pProjects/sigmapi2sigma   (correct)
+tmux kill-session -t _t
+```
+
+## Component D — Cwd-mismatch warning on Assign
+
+### Backend: enrich the 409 response
+
+When `POST /api/tmux/sessions` detects an existing session, the route currently returns:
+
+```typescript
+return res.status(409).json({ error: `tmux session "${name}" already exists` });
+```
+
+After the fix, also include the existing session's distinct pane cwds and a `cwdMismatch` boolean computed against the requested cwd (with tilde expansion already applied):
+
+```typescript
+if (String(e?.message ?? "").includes("already exists")) {
+  // Probe the existing session's panes for the warning UI.
+  let existingCwds: string[] = [];
+  let cwdMismatch = false;
+  try {
+    const tree = await buildTmuxTree();
+    const hit = tree.find(s => s.name === name);
+    if (hit) {
+      existingCwds = [...new Set(hit.windows.flatMap(w => w.panes.map(p => p.cwd)))];
+      const targetCwd = typeof cwd === "string" && cwd.length > 0 ? expandHome(cwd) : null;
+      cwdMismatch = !!targetCwd && !existingCwds.includes(targetCwd);
+    }
+  } catch { /* fail open: empty list, no mismatch flag */ }
+  return res.status(409).json({
+    error: `tmux session "${name}" already exists`,
+    existingCwds,
+    cwdMismatch,
+  });
+}
+```
+
+The shape change is additive — existing 409 consumers keep working since they only read `error`. Today the only consumer is `smartAssign()` in Projects.tsx; saved-tmux's pin route also surfaces 404/400 but never 409 from this endpoint.
+
+### Frontend: render the warning
+
+`web/src/pages/Projects.tsx`'s `smartAssign` function changes from:
+
+```typescript
+if (err.includes("already exists")) {
+  info = `Tmux session "${name}" already exists; reusing it.`;
+}
+```
+
+to read the structured fields and surface a warning if there's a mismatch. The display element in the drawer (`error` state, rendered with `whitespace-pre-wrap` styling) accepts multi-line text:
+
+```typescript
+if (err.includes("already exists")) {
+  const body = r.body as { error: string; existingCwds?: string[]; cwdMismatch?: boolean };
+  if (body.cwdMismatch && workingDir.trim()) {
+    const cwds = (body.existingCwds ?? []).map(c => `  • ${c}`).join("\n");
+    info =
+      `⚠ Tmux session "${name}" already exists, but no pane is in your working_dir (${workingDir.trim()}).\n` +
+      `Existing panes are in:\n${cwds}\n\n` +
+      `Tmux can't change an existing session's cwd. To use the new working_dir:\n` +
+      `  1. tmux kill-session -t ${name}\n` +
+      `  2. Click Assign again\n` +
+      `Or non-destructively add a window:\n` +
+      `  tmux new-window -t ${name} -c "${workingDir.trim()}"`;
+  } else {
+    info = `Tmux session "${name}" already exists; reusing it.`;
+  }
+}
+```
+
+If the existing error display element doesn't already preserve newlines, the implementer should add `whitespace-pre-wrap` to its className. Color the warning text amber (`text-amber-300`) when `cwdMismatch` is true to distinguish from the neutral "reusing it" case.
+
+### Failure-open semantics
+
+If the server can't build the tmux tree (tmux down, command errors), the 409 response degrades to `{ error, existingCwds: [], cwdMismatch: false }`. The frontend shows the original "reusing it" message — the warning is best-effort, not a guarantee. No exception bubbles up.
+
+### Verification
+
+1. Create a project with `working_dir: /home/dsu/pProjects/sigmapi2sigma` and abbreviation `sig`.
+2. Manually create a tmux session with a different cwd: `tmux new-session -d -s sig -c /tmp`.
+3. Open the project drawer, click Assign with name `sig`.
+4. Expect the amber warning listing `/tmp` as the existing cwd, with the `tmux kill-session` instructions.
+5. `tmux kill-session -t sig`, click Assign again → fresh session at the right cwd, no warning, "Created tmux session" message.
+
+## Components & responsibility
+
+- `web/src/pages/TmuxMap.tsx` — Components A (fold + persistence) and B (force-confirm modal)
+- New inline `ForceConfirmModal` alongside `ScrollbackModal` (Component B)
+- `server/lib/paths.ts` (new) — `expandHome` helper (Component C)
+- `server/routes/tmux.ts` — apply `expandHome` + enrich 409 (Components C, D)
+- `server/routes/snapshots.ts` — apply `expandHome` to `/resume` (Component C)
+- `web/src/pages/Projects.tsx` — read enriched 409 and render warning (Component D)
+
 ## Error handling
 
-- **localStorage unavailable.** Both read (in `useState` init) and write (in `useEffect`) are wrapped in `try/catch`. Failure degrades silently to in-memory fold state — equivalent to today's behavior, no loss of functionality.
-- **Lookup of `liveSession` fails despite `liveSessionNames.has(name)`.** Treated as "no conflict" and the restore proceeds without a prompt. This case is theoretically impossible (the Set is built from the same array we look up in) but the guard prevents a hard crash.
-- **`data.snapshot` is null when computing dead-row sourceLabel.** Defensive fallback to `"the latest snapshot"`. The dead-row `Restore --force` button only renders when `sessionState !== "alive"` and a snapshot exists, so this code path is unreachable in practice.
+- **localStorage unavailable.** Both read (in `useState` init) and write (in `useEffect`) are wrapped in `try/catch`. Failure degrades silently to in-memory fold state — equivalent to today's behavior, no loss of functionality. (Component A)
+- **Lookup of `liveSession` fails despite `liveSessionNames.has(name)`.** Treated as "no conflict" and the restore proceeds without a prompt. This case is theoretically impossible (the Set is built from the same array we look up in) but the guard prevents a hard crash. (Component B)
+- **`data.snapshot` is null when computing dead-row sourceLabel.** Defensive fallback to `"the latest snapshot"`. The dead-row `Restore --force` button only renders when `sessionState !== "alive"` and a snapshot exists, so this code path is unreachable in practice. (Component B)
+- **`expandHome` receives a non-string or empty.** Type guard at the call site (`typeof cwd === "string" && cwd.length > 0`) means `expandHome` only ever sees a non-empty string. The function itself is total: returns input unchanged when there's no leading tilde. (Component C)
+- **`buildTmuxTree` throws while computing the existing session's cwds.** Wrapped in `try/catch`; on failure the 409 response degrades to `existingCwds: []` and `cwdMismatch: false` and the frontend shows the original "reusing it" message. (Component D)
 
 ## Verification
 
@@ -285,12 +479,14 @@ This codebase has no test framework. Verification is manual + type/build gates.
 - `npx tsc -p . --noEmit` — zero errors
 - `npm run build:web` — clean Vite build
 
-**Manual checks:**
+**Manual checks (folding — Component A):**
 1. Pin a session via `📌 Save for later` (saved section appears with `📌 Saved for Later` header).
-2. Click the section caret: section collapses to a single header line, refresh page, section stays collapsed.
-3. Unfold section, click a saved-entry caret: pane grid for that entry hides, refresh page, entry stays collapsed.
+2. Click the section caret: section collapses to a single header line; refresh page; section stays collapsed.
+3. Unfold section, click a saved-entry caret: pane grid for that entry hides; refresh page; entry stays collapsed.
 4. `Fold all`: section + every saved entry + every live session collapse together.
 5. `Unfold all`: everything expands.
+
+**Manual checks (force-confirm — Component B):**
 6. With a session named `X` currently alive, click `Restore --force` on a saved entry named `X`:
    - Modal appears, listing windows/panes/cwds/Claude convos for the running session
    - Press `Escape` → modal closes, no restore happens, live session intact
@@ -298,6 +494,17 @@ This codebase has no test framework. Verification is manual + type/build gates.
    - Click `Replace` → modal closes, live session is killed and recreated from saved data
 7. With no live session named `Y`, click `Restore --force` on a saved entry named `Y` → no modal, restore happens silently.
 8. Same checks (6+7) on dead-row `Restore --force` in the main live tree.
+
+**Manual checks (tilde expansion — Component C):**
+9. Set a project's working_dir to `~/pProjects/sigmapi2sigma`.
+10. Click Assign on a name not yet in tmux. Run `tmux list-panes -t NAME -F '#{pane_current_path}'` → expanded `/home/dsu/pProjects/sigmapi2sigma`.
+11. From Sessions tab, click "Resume in new tmux" with a Claude session whose LWD starts with `~/...` → the new tmux session lands at the expanded path.
+
+**Manual checks (cwd-mismatch warning — Component D):**
+12. Project with absolute working_dir `/home/dsu/pProjects/sigmapi2sigma`. Manually create a conflicting session: `tmux new-session -d -s NAME -c /tmp`.
+13. Open project drawer, click Assign with name `NAME` → amber warning appears listing `/tmp` and the kill-then-Assign instructions.
+14. `tmux kill-session -t NAME`, click Assign → no warning, session created at the correct cwd.
+15. Tmux down (`tmux kill-server`), click Assign → no exception in server logs; frontend gets a 500 or graceful error consistent with current behavior.
 
 ## Open trade-offs (acknowledged, not blocking)
 
