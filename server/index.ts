@@ -3,6 +3,7 @@ import { sessionsRouter } from "./routes/sessions.js";
 import { tmuxRouter } from "./routes/tmux.js";
 import { shellHistoryRouter } from "./routes/shell-history.js";
 import { snapshotsRouter } from "./routes/snapshots.js";
+import { savedTmuxRouter } from "./routes/saved-tmux.js";
 import { projectsRouter } from "./routes/projects.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { assignmentsRouter } from "./routes/assignments.js";
@@ -23,6 +24,7 @@ app.use("/api", assignmentsRouter);
 app.use("/api", settingsRouter);
 app.use("/api", pomodorosRouter);
 app.use("/api", backupsRouter);
+app.use("/api", savedTmuxRouter);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 

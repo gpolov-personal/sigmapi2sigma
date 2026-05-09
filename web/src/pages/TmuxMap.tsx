@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getJSON, getText, postJSON, TmuxResponse, TmuxPane, TmuxWindow, TmuxSession, ShellEntry } from "../api";
+import { getJSON, getText, postJSON, TmuxResponse, TmuxPane, TmuxWindow, TmuxSession, ShellEntry, SavedTmuxFile } from "../api";
 import { copy, relativeTime, trunc } from "../utils";
 import { ProjectAssignmentMenu } from "../components/ProjectAssignmentMenu";
 import { BrainCircuit } from "lucide-react";
@@ -11,11 +11,18 @@ export function TmuxMap() {
   const [cmdModal, setCmdModal] = useState<{ paneId: string; entries: ShellEntry[] } | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [restoreLog, setRestoreLog] = useState<string | null>(null);
+  const [saved, setSaved] = useState<SavedTmuxFile | null>(null);
 
   async function refresh() {
     setLoading(true);
-    try { setData(await getJSON<TmuxResponse>("/api/tmux")); }
-    finally { setLoading(false); }
+    try {
+      const [tmuxR, savedR] = await Promise.allSettled([
+        getJSON<TmuxResponse>("/api/tmux"),
+        getJSON<SavedTmuxFile>("/api/saved-tmux"),
+      ]);
+      if (tmuxR.status === "fulfilled") setData(tmuxR.value);
+      if (savedR.status === "fulfilled") setSaved(savedR.value);
+    } finally { setLoading(false); }
   }
   useEffect(() => { refresh(); const id = setInterval(refresh, 60_000); return () => clearInterval(id); }, []);
 
@@ -112,6 +119,40 @@ export function TmuxMap() {
     }
   }
 
+  async function restoreSaved(name: string, force: boolean) {
+    setRestoreLog(`Restoring saved "${name}"…`);
+    try {
+      const r = await postJSON<{
+        ok: boolean; exitCode?: number; stdout?: string; stderr?: string; error?: string;
+      }>(`/api/saved-tmux/${encodeURIComponent(name)}/restore`, { force });
+      const header = r.ok ? "" : `RESTORE FAILED (exit ${r.exitCode ?? "?"})\n\n`;
+      setRestoreLog(
+        header +
+        (r.stdout ?? "(no stdout)") +
+        (r.stderr ? `\n\n--- warnings/errors ---\n${r.stderr}` : "") +
+        (r.error  ? `\n\n--- node error ---\n${r.error}`  : "")
+      );
+      await refresh();
+    } catch (e: any) {
+      setRestoreLog(`request failed: ${e.message ?? e}`);
+    }
+  }
+
+  async function forget(name: string) {
+    if (!confirm(`Forget saved session "${name}"? This removes the bookmark but doesn't touch tmux.`)) return;
+    await fetch(`/api/saved-tmux/${encodeURIComponent(name)}`, { method: "DELETE" });
+    await refresh();
+  }
+
+  async function saveForLater(name: string) {
+    try {
+      await postJSON("/api/saved-tmux/pin", { sessionName: name });
+      await refresh();
+    } catch (e: any) {
+      setRestoreLog(`Save failed: ${e.message ?? e}`);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className={`border rounded p-3 text-sm flex items-center gap-4 ${
@@ -172,6 +213,72 @@ export function TmuxMap() {
         </div>
       )}
 
+      {saved && saved.sessions.length > 0 && (
+        <div className="border border-amber-700/60 bg-amber-950/20 rounded">
+          <div className="px-4 py-2 font-semibold border-b border-amber-800/60 flex items-center gap-3">
+            <span className="text-amber-300">📌 Saved for Later</span>
+            <span className="text-xs text-slate-400">{saved.sessions.length} pinned · survives snapshot rotation</span>
+          </div>
+          <div className="divide-y divide-amber-900/40">
+            {saved.sessions.map(s => {
+              const m = saved.meta[s.name];
+              const aliveNow = liveSessionNames.has(s.name);
+              const allPaneIds = s.windows.flatMap(w => w.panes.map(p => p.paneId));
+              return (
+                <div key={s.name} className="px-4 py-2">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="font-semibold">{s.name}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-200">saved</span>
+                    {aliveNow && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-green-900/40 text-green-300">currently alive</span>
+                    )}
+                    <span className="text-xs text-slate-500">
+                      {s.windows.length}w · {allPaneIds.length}p
+                    </span>
+                    {m && (
+                      <span className="text-xs text-slate-500" title={`saved ${m.savedAt}; last seen ${m.lastSeenAt}`}>
+                        saved {relativeTime(new Date(m.savedAt).getTime())} · last seen {relativeTime(new Date(m.lastSeenAt).getTime())}
+                      </span>
+                    )}
+                    <div className="ml-auto flex gap-2">
+                      <button
+                        onClick={() => copy(`tmux attach -t ${s.name}`)}
+                        className="text-xs text-slate-400 hover:text-white"
+                      >copy attach</button>
+                      <button
+                        onClick={() => restoreSaved(s.name, false)}
+                        disabled={aliveNow}
+                        className="text-xs px-2 py-0.5 bg-blue-600 rounded hover:bg-blue-500 disabled:opacity-40"
+                        title={aliveNow ? "Already running — kill it first or use --force" : "Recreate the tmux session from the saved data"}
+                      >Restore</button>
+                      <button
+                        onClick={() => restoreSaved(s.name, true)}
+                        className="text-xs px-2 py-0.5 bg-red-700 rounded hover:bg-red-600"
+                        title="Kill any existing session with this name first"
+                      >Restore --force</button>
+                      <button
+                        onClick={() => forget(s.name)}
+                        className="text-xs px-2 py-0.5 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700"
+                      >Forget</button>
+                    </div>
+                  </div>
+                  <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(22rem, 1fr))" }}>
+                    {s.windows.flatMap(w => w.panes.map(p => (
+                      <PaneCard
+                        key={`${w.index}.${p.index}.${p.paneId}`}
+                        pane={p}
+                        state="unknown"
+                        onCommands={() => openCommands(p.paneId)}
+                      />
+                    )))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {sessions.length === 0 && (
         <div className="text-slate-500 text-sm">No tmux sessions to show.</div>
       )}
@@ -218,20 +325,30 @@ export function TmuxMap() {
                 </button>
                 {sessionState !== "alive" && (
                   <>
+                    {!saved?.sessions.some(x => x.name === s.name) && (
+                      <button
+                        onClick={() => saveForLater(s.name)}
+                        className="text-xs px-2 py-0.5 bg-amber-700 rounded hover:bg-amber-600"
+                        title="Pin this session into ~/.sigmapi2sigma/saved-tmux.json so it survives snapshot rotation"
+                      >📌 Save for later</button>
+                    )}
                     <button
                       onClick={() => restoreOnly(s.name, false)}
                       className="text-xs px-2 py-0.5 bg-blue-600 rounded hover:bg-blue-500"
-                    >
-                      Restore this session
-                    </button>
+                    >Restore this session</button>
                     <button
                       onClick={() => restoreOnly(s.name, true)}
                       className="text-xs px-2 py-0.5 bg-red-700 rounded hover:bg-red-600"
                       title="Kill any existing session with this name first"
-                    >
-                      Restore --force
-                    </button>
+                    >Restore --force</button>
                   </>
+                )}
+                {sessionState === "alive" && !saved?.sessions.some(x => x.name === s.name) && (
+                  <button
+                    onClick={() => saveForLater(s.name)}
+                    className="text-xs px-2 py-0.5 bg-amber-700 rounded hover:bg-amber-600"
+                    title="Bookmark this session before killing it — survives snapshot rotation"
+                  >📌 Save for later</button>
                 )}
               </div>
             </div>
