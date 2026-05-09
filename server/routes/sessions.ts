@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { listAllSessionFiles, readSessionMeta, readSessionDetail } from "../lib/jsonl.js";
+import { getLastLocationsBySessionId } from "../lib/tmuxBindings.js";
 
 export const sessionsRouter = Router();
 
@@ -15,7 +16,19 @@ sessionsRouter.get("/sessions", async (req, res) => {
     .filter(m => m.mtime >= cutoff)
     .sort((a, b) => b.mtime - a.mtime);
 
-  res.json({ sessions: metas });
+  const ids = new Set(metas.map(m => m.id));
+  const locations = await getLastLocationsBySessionId(ids);
+  const enriched = metas.map(m => {
+    const loc = locations.get(m.id);
+    return { ...m, lastTmuxLocation: loc ? {
+      tmuxSession: loc.tmuxSession,
+      windowIndex: loc.windowIndex,
+      paneIndex: loc.paneIndex,
+      ts: loc.ts,
+    } : null };
+  });
+
+  res.json({ sessions: enriched });
 });
 
 sessionsRouter.get("/sessions/:id", async (req, res) => {

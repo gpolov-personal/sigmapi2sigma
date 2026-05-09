@@ -59,6 +59,8 @@ export interface SessionMeta {
   lastTs: string | null;
   lastUserPrompt: string | null;
   lastUserTs: string | null;
+  /** Most recent (claudeSessionId, tmuxSession, window, pane) tuple ever observed for this session. */
+  lastTmuxLocation: { tmuxSession: string; windowIndex: number; paneIndex: number; ts: string } | null;
 }
 
 export interface TmuxPane {

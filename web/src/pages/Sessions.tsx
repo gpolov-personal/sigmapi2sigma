@@ -123,7 +123,7 @@ export function Sessions() {
                   <td className="px-3 py-2 text-slate-400 whitespace-nowrap">{relativeTime(s.mtime)}</td>
                   <td className="px-3 py-2 text-slate-300">{trunc(s.lastUserPrompt, 160)}</td>
                   <td className="px-3 py-2 text-xs font-mono text-slate-400 whitespace-nowrap">
-                    {liveLocs && liveLocs.length > 0 && (
+                    {liveLocs && liveLocs.length > 0 ? (
                       <div className="space-y-0.5">
                         {liveLocs.map(loc => {
                           const projectId = assignmentsByTmux.get(loc.tmuxSession);
@@ -136,7 +136,22 @@ export function Sessions() {
                           );
                         })}
                       </div>
-                    )}
+                    ) : s.lastTmuxLocation ? (
+                      (() => {
+                        const loc = s.lastTmuxLocation;
+                        const projectId = assignmentsByTmux.get(loc.tmuxSession);
+                        const project = projectId ? projectById.get(projectId) : null;
+                        return (
+                          <div
+                            className="flex items-center gap-1.5 text-slate-500"
+                            title={`Last seen ${relativeTime(new Date(loc.ts).getTime())} (${new Date(loc.ts).toLocaleString()})`}
+                          >
+                            <span>{loc.tmuxSession}:{loc.windowIndex}.{loc.paneIndex}</span>
+                            {project && <ProjectChip project={project} />}
+                          </div>
+                        );
+                      })()
+                    ) : null}
                   </td>
                 </tr>
               );
