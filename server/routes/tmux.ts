@@ -41,7 +41,22 @@ tmuxRouter.post("/tmux/sessions", async (req, res) => {
     res.json({ ok: true, name });
   } catch (e: any) {
     if (String(e?.message ?? "").includes("already exists")) {
-      return res.status(409).json({ error: `tmux session "${name}" already exists` });
+      let existingCwds: string[] = [];
+      let cwdMismatch = false;
+      try {
+        const tree = await buildTmuxTree();
+        const hit = tree.find(s => s.name === name);
+        if (hit) {
+          existingCwds = [...new Set(hit.windows.flatMap(w => w.panes.map(p => p.cwd)))];
+          const targetCwd = typeof cwd === "string" && cwd.length > 0 ? expandHome(cwd) : null;
+          cwdMismatch = !!targetCwd && !existingCwds.includes(targetCwd);
+        }
+      } catch { /* fail open: empty list, no mismatch flag */ }
+      return res.status(409).json({
+        error: `tmux session "${name}" already exists`,
+        existingCwds,
+        cwdMismatch,
+      });
     }
     res.status(500).json({ error: String(e?.message ?? e) });
   }
