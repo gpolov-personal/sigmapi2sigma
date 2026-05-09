@@ -26,6 +26,13 @@ export function TmuxMap() {
     catch { /* full quota / private mode → ignore */ }
   }, [collapsed]);
   const [restoreLog, setRestoreLog] = useState<string | null>(null);
+  type ForceContext = {
+    name: string;
+    source: "saved" | "snapshot";
+    sourceLabel: string;
+    liveSession: TmuxSession;
+  };
+  const [forceConfirm, setForceConfirm] = useState<ForceContext | null>(null);
   const [saved, setSaved] = useState<SavedTmuxFile | null>(null);
 
   async function refresh() {
@@ -165,6 +172,28 @@ export function TmuxMap() {
     await refresh();
   }
 
+  function tryForceRestore(source: "saved" | "snapshot", name: string, sourceLabel: string) {
+    if (!liveSessionNames.has(name)) {
+      // No conflict — proceed without prompt.
+      if (source === "saved") restoreSaved(name, true); else restoreOnly(name, true);
+      return;
+    }
+    const liveSession = (data?.source === "live" ? data.tree : []).find(s => s.name === name);
+    if (!liveSession) {
+      // Defensive: liveSessionNames was true but lookup failed. Proceed without prompt.
+      if (source === "saved") restoreSaved(name, true); else restoreOnly(name, true);
+      return;
+    }
+    setForceConfirm({ name, source, sourceLabel, liveSession });
+  }
+
+  function confirmForce() {
+    const ctx = forceConfirm;
+    setForceConfirm(null);
+    if (!ctx) return;
+    if (ctx.source === "saved") restoreSaved(ctx.name, true); else restoreOnly(ctx.name, true);
+  }
+
   async function saveForLater(name: string) {
     try {
       await postJSON("/api/saved-tmux/pin", { sessionName: name });
@@ -282,7 +311,11 @@ export function TmuxMap() {
                         title={aliveNow ? "Already running — kill it first or use --force" : "Recreate the tmux session from the saved data"}
                       >Restore</button>
                       <button
-                        onClick={() => restoreSaved(s.name, true)}
+                        onClick={() => tryForceRestore(
+                          "saved",
+                          s.name,
+                          m ? `saved-tmux.json (saved ${relativeTime(new Date(m.savedAt).getTime())})` : "saved-tmux.json"
+                        )}
                         className="text-xs px-2 py-0.5 bg-red-700 rounded hover:bg-red-600"
                         title="Kill any existing session with this name first"
                       >Restore --force</button>
@@ -370,7 +403,13 @@ export function TmuxMap() {
                       className="text-xs px-2 py-0.5 bg-blue-600 rounded hover:bg-blue-500"
                     >Restore this session</button>
                     <button
-                      onClick={() => restoreOnly(s.name, true)}
+                      onClick={() => tryForceRestore(
+                        "snapshot",
+                        s.name,
+                        data?.snapshot
+                          ? `snapshot ${relativeTime(new Date(data.snapshot.ts).getTime())}`
+                          : "the latest snapshot"
+                      )}
                       className="text-xs px-2 py-0.5 bg-red-700 rounded hover:bg-red-600"
                       title="Kill any existing session with this name first"
                     >Restore --force</button>
@@ -473,6 +512,13 @@ export function TmuxMap() {
           </div>
           <pre className="p-3 text-xs whitespace-pre-wrap break-words">{restoreLog}</pre>
         </div>
+      )}
+      {forceConfirm && (
+        <ForceConfirmModal
+          ctx={forceConfirm}
+          onCancel={() => setForceConfirm(null)}
+          onConfirm={confirmForce}
+        />
       )}
     </div>
   );
@@ -594,6 +640,60 @@ function ScrollbackModal({ title, body, onClose }:
           <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
         </div>
         {body}
+      </div>
+    </div>
+  );
+}
+
+function ForceConfirmModal({ ctx, onCancel, onConfirm }: {
+  ctx: { name: string; source: "saved" | "snapshot"; sourceLabel: string; liveSession: TmuxSession };
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const allPanes = ctx.liveSession.windows.flatMap(w => w.panes);
+  const cwds = [...new Set(allPanes.map(p => p.cwd))];
+  const claudeIds = allPanes
+    .filter(p => p.cmd === "claude" && p.claudeSessionId)
+    .map(p => p.claudeSessionId!);
+
+  // Esc key dismisses without action.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onCancel}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className="bg-slate-900 border border-red-700 rounded p-6 max-w-2xl w-full mx-4"
+      >
+        <h2 className="text-lg font-semibold text-red-300 mb-3">Replace running tmux session?</h2>
+        <p className="text-sm mb-2">
+          A live tmux session named <code className="text-amber-300">{ctx.name}</code> is currently running with:
+        </p>
+        <ul className="text-sm space-y-1 mb-3 text-slate-300">
+          <li>• {ctx.liveSession.windows.length} window{ctx.liveSession.windows.length === 1 ? "" : "s"}, {allPanes.length} pane{allPanes.length === 1 ? "" : "s"}</li>
+          {cwds.slice(0, 4).map(c => <li key={c} className="font-mono text-xs truncate">• cwd: {c}</li>)}
+          {cwds.length > 4 && <li className="text-xs text-slate-500">  (+{cwds.length - 4} more cwds)</li>}
+          {claudeIds.length > 0 && (
+            <li>• {claudeIds.length} Claude conversation{claudeIds.length === 1 ? "" : "s"}</li>
+          )}
+        </ul>
+        <p className="text-sm text-slate-400 mb-4">
+          <b>Restore --force</b> will <b className="text-red-300">kill the running session</b> and recreate it from {ctx.sourceLabel}.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm hover:bg-slate-700"
+          >Cancel</button>
+          <button
+            onClick={onConfirm}
+            className="px-3 py-1.5 bg-red-700 rounded text-sm hover:bg-red-600"
+          >Replace</button>
+        </div>
       </div>
     </div>
   );
