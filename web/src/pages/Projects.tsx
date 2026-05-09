@@ -514,9 +514,22 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
       if (r.ok) {
         info = `Created tmux session "${name}".`;
       } else {
-        const err = (r.body as { error: string }).error ?? "";
+        const body = r.body as { error: string; existingCwds?: string[]; cwdMismatch?: boolean };
+        const err = body.error ?? "";
         if (err.includes("already exists")) {
-          info = `Tmux session "${name}" already exists; reusing it.`;
+          if (body.cwdMismatch && workingDir.trim()) {
+            const cwds = (body.existingCwds ?? []).map(c => `  • ${c}`).join("\n");
+            info =
+              `⚠ Tmux session "${name}" already exists, but no pane is in your working_dir (${workingDir.trim()}).\n` +
+              `Existing panes are in:\n${cwds}\n\n` +
+              `Tmux can't change an existing session's cwd. To use the new working_dir:\n` +
+              `  1. tmux kill-session -t ${name}\n` +
+              `  2. Click Assign again\n` +
+              `Or non-destructively add a window:\n` +
+              `  tmux new-window -t ${name} -c "${workingDir.trim()}"`;
+          } else {
+            info = `Tmux session "${name}" already exists; reusing it.`;
+          }
         } else {
           // Tmux down or other error — still record the assignment by name.
           info = `Note: could not probe/create tmux (${err}). Assignment recorded; will apply when a session named "${name}" exists.`;
@@ -679,7 +692,11 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
             </div>
           </div>
 
-          {error && <div className="text-sm text-red-400">{error}</div>}
+          {error && (
+            <div className={`text-sm whitespace-pre-wrap font-mono ${
+              error.startsWith("⚠") ? "text-amber-300" : "text-red-400"
+            }`}>{error}</div>
+          )}
 
           <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
             <button onClick={save} disabled={busy}
