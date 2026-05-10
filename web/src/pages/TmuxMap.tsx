@@ -53,6 +53,9 @@ export function TmuxMap() {
 
   // Merge the live tree with sessions found in any recent snapshot. Snapshots are ordered
   // newest-first (latest, prev, prev2, ...), so the first hit wins for "last seen at".
+  // Sessions present in saved-tmux.json are filtered out — they render exclusively in the
+  // amber Saved-for-Later panel above and never as a dead row in the live tree.
+  const savedNames = useMemo(() => new Set(saved?.sessions.map(s => s.name) ?? []), [saved]);
   const { sessions, lastSeenByName } = useMemo(() => {
     const result = { sessions: [] as typeof data extends { tree: infer T } ? T : any[], lastSeenByName: new Map<string, string>() };
     if (!data) return result;
@@ -67,13 +70,15 @@ export function TmuxMap() {
         }
       }
     }
+    // Drop sessions that are pinned in Saved-for-Later — they belong only to the amber section.
+    for (const n of savedNames) byName.delete(n);
     if (data.source === "snapshot" && byName.size === 0) {
-      result.sessions = data.tree as any;
+      result.sessions = (data.tree as any[]).filter(s => !savedNames.has(s.name)) as any;
     } else {
       result.sessions = [...byName.values()] as any;
     }
     return result;
-  }, [data]);
+  }, [data, savedNames]);
 
   const liveSessionNames = useMemo(
     () => new Set(data?.source === "live" ? data.tree.map(s => s.name) : []),
@@ -200,6 +205,28 @@ export function TmuxMap() {
       await refresh();
     } catch (e: any) {
       setRestoreLog(`Save failed: ${e.message ?? e}`);
+    }
+  }
+
+  // Save & Kill confirm: same modal as Restore --force but a different on-confirm action.
+  const [saveKillConfirm, setSaveKillConfirm] = useState<{ name: string; liveSession: TmuxSession } | null>(null);
+  function tryForceSaveAndKill(session: TmuxSession) {
+    setSaveKillConfirm({ name: session.name, liveSession: session });
+  }
+  async function confirmSaveAndKill() {
+    const ctx = saveKillConfirm;
+    setSaveKillConfirm(null);
+    if (!ctx) return;
+    try {
+      await postJSON("/api/saved-tmux/pin", { sessionName: ctx.name });
+      const r = await fetch(`/api/tmux/sessions/${encodeURIComponent(ctx.name)}/kill`, { method: "POST" });
+      if (!r.ok && r.status !== 404) {
+        const body = await r.json().catch(() => ({}));
+        setRestoreLog(`Pin succeeded but kill failed: ${body.error ?? r.statusText}`);
+      }
+      await refresh();
+    } catch (e: any) {
+      setRestoreLog(`Save & kill failed: ${e.message ?? e}`);
     }
   }
 
@@ -417,10 +444,10 @@ export function TmuxMap() {
                 )}
                 {sessionState === "alive" && !saved?.sessions.some(x => x.name === s.name) && (
                   <button
-                    onClick={() => saveForLater(s.name)}
+                    onClick={() => tryForceSaveAndKill(s)}
                     className="text-xs px-2 py-0.5 bg-amber-700 rounded hover:bg-amber-600"
-                    title="Bookmark this session before killing it — survives snapshot rotation"
-                  >📌 Save for later</button>
+                    title="Pin this session into ~/.sigmapi2sigma/saved-tmux.json AND kill the running tmux session"
+                  >📌 Save &amp; kill</button>
                 )}
               </div>
             </div>
@@ -520,6 +547,71 @@ export function TmuxMap() {
           onConfirm={confirmForce}
         />
       )}
+      {saveKillConfirm && (
+        <SaveKillConfirmModal
+          name={saveKillConfirm.name}
+          liveSession={saveKillConfirm.liveSession}
+          onCancel={() => setSaveKillConfirm(null)}
+          onConfirm={confirmSaveAndKill}
+        />
+      )}
+    </div>
+  );
+}
+
+function SaveKillConfirmModal({ name, liveSession, onCancel, onConfirm }: {
+  name: string;
+  liveSession: TmuxSession;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const allPanes = liveSession.windows.flatMap(w => w.panes);
+  const cwds = [...new Set(allPanes.map(p => p.cwd))];
+  const claudeIds = allPanes
+    .filter(p => p.cmd === "claude" && p.claudeSessionId)
+    .map(p => p.claudeSessionId!);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onCancel}>
+      <div
+        onClick={e => e.stopPropagation()}
+        className="bg-slate-900 border border-amber-700 rounded p-6 max-w-2xl w-full mx-4"
+      >
+        <h2 className="text-lg font-semibold text-amber-300 mb-3">Save and kill running tmux session?</h2>
+        <p className="text-sm mb-2">
+          Will pin <code className="text-amber-300">{name}</code> to{" "}
+          <code className="text-slate-300">~/.sigmapi2sigma/saved-tmux.json</code>{" "}
+          and then kill the running session. The current state to be saved:
+        </p>
+        <ul className="text-sm space-y-1 mb-3 text-slate-300">
+          <li>• {liveSession.windows.length} window{liveSession.windows.length === 1 ? "" : "s"}, {allPanes.length} pane{allPanes.length === 1 ? "" : "s"}</li>
+          {cwds.slice(0, 4).map(c => <li key={c} className="font-mono text-xs truncate">• cwd: {c}</li>)}
+          {cwds.length > 4 && <li className="text-xs text-slate-500">  (+{cwds.length - 4} more cwds)</li>}
+          {claudeIds.length > 0 && (
+            <li>• {claudeIds.length} Claude conversation{claudeIds.length === 1 ? "" : "s"}</li>
+          )}
+        </ul>
+        <p className="text-sm text-slate-400 mb-4">
+          The session structure (cwds, claude session IDs, layout) is stored. Tmux scrollback and any running
+          processes will be lost — the same as a regular tmux kill. Restore later from the Saved-for-Later panel.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm hover:bg-slate-700"
+          >Cancel</button>
+          <button
+            onClick={onConfirm}
+            className="px-3 py-1.5 bg-amber-700 rounded text-sm hover:bg-amber-600"
+          >Save &amp; kill</button>
+        </div>
+      </div>
     </div>
   );
 }

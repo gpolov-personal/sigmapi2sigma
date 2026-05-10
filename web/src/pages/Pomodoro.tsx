@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plus, X, AlarmClock, Coffee, Play } from "lucide-react";
-import { Pomodoro, Project, Task, apiRequest } from "../api";
+import { Pomodoro, Project, Task, apiRequest, FREE_PROJECT_ID } from "../api";
 import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
 import { ProjectChip } from "../components/ProjectChip";
@@ -23,6 +23,7 @@ interface NextPomodoroProposal {
   projectIds: string[];
   taskIds: string[];
   durationMinutes: number;
+  freeTaskLabel?: string;
 }
 
 // Same attribution formula as backend / Projects page.
@@ -61,6 +62,7 @@ export function PomodoroPage() {
   const [now, setNow] = useState(Date.now());
   const [pickedProjects, setPickedProjects] = useState<string[]>([]);
   const [pickedTasks, setPickedTasks] = useState<string[]>([]);
+  const [freeTaskLabel, setFreeTaskLabel] = useState<string>(() => loadActive()?.freeTaskLabel ?? "");
   const [duration, setDuration] = useState<number>(settings.defaultPomodoroDuration);
   const [pomodoros, setPomodoros] = useState<Pomodoro[]>([]);
   const [showManual, setShowManual] = useState(false);
@@ -101,20 +103,23 @@ export function PomodoroPage() {
   const remainingMs = active ? targetMs - now : 0;
   const elapsedMs = active ? now - active.startedAt : 0;
 
-  const startTimerFromProposal = useCallback(async (proposal: NextPomodoroProposal) => {
+  const startTimerFromProposal = useCallback(async (proposal: NextPomodoroProposal, freeLabel?: string) => {
     if (settings.notificationsEnabled) ensureNotificationPermission();
     // The first user-gesture call to playBeep also unlocks the AudioContext.
     if (settings.audioEnabled) playBeep(settings.startBeepSound);
+    const label = (freeLabel ?? "").trim();
     const s: LiveTimerState = {
       startedAt: Date.now(),
       targetDurationMinutes: proposal.durationMinutes,
       topicIds: proposal.projectIds,
       taskIds: proposal.taskIds,
+      freeTaskLabel: label,
     };
     saveActive(s);
     setActive(s);
     setPickedProjects(proposal.projectIds);
     setPickedTasks(proposal.taskIds);
+    setFreeTaskLabel(label);
     setDuration(proposal.durationMinutes);
     setNow(Date.now());
   }, [settings.audioEnabled, settings.notificationsEnabled, settings.startBeepSound]);
@@ -130,6 +135,7 @@ export function PomodoroPage() {
       project_ids: state.topicIds,
       task_ids: state.taskIds ?? [],
       notes: "",
+      freeTaskLabel: state.freeTaskLabel ?? "",
       source: "live-timer",
     });
     clearActive();
@@ -207,13 +213,16 @@ export function PomodoroPage() {
 
   async function startTimer() {
     if (pickedProjects.length === 0) return;
-    await startTimerFromProposal({ projectIds: pickedProjects, taskIds: pickedTasks, durationMinutes: duration });
+    await startTimerFromProposal(
+      { projectIds: pickedProjects, taskIds: pickedTasks, durationMinutes: duration },
+      freeTaskLabel
+    );
   }
 
   async function stopTimer() {
     if (!active) return;
-    // Always sync taskIds from current React state into the active timer before finalizing.
-    const synced: LiveTimerState = { ...active, taskIds: pickedTasks };
+    // Always sync taskIds + freeTaskLabel from current React state into the active timer before finalizing.
+    const synced: LiveTimerState = { ...active, taskIds: pickedTasks, freeTaskLabel: freeTaskLabel.trim() };
     saveActive(synced);
     await finalizePomodoro(synced, Date.now());
   }
@@ -273,6 +282,7 @@ export function PomodoroPage() {
     // Prefill picker with the rest's proposal so user can reconfigure.
     setPickedProjects(postFlow.proposal.projectIds);
     setPickedTasks(postFlow.proposal.taskIds);
+    setFreeTaskLabel(postFlow.proposal.freeTaskLabel ?? "");
     setDuration(postFlow.proposal.durationMinutes);
     clearRest();
     setPostFlow(null);
@@ -378,6 +388,20 @@ export function PomodoroPage() {
                 {pickedProjects.map(pid => {
                   const proj = projectById.get(pid);
                   const tasksForP = eligibleTasksForPicked.get(pid) ?? [];
+                  if (pid === FREE_PROJECT_ID) {
+                    return (
+                      <div key={pid} className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs" style={{ color: proj?.color }}>{proj?.name ?? "Free"}:</span>
+                        <input
+                          value={freeTaskLabel}
+                          onChange={e => setFreeTaskLabel(e.target.value)}
+                          placeholder="What are you working on?"
+                          maxLength={200}
+                          className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
+                        />
+                      </div>
+                    );
+                  }
                   if (tasksForP.length === 0) {
                     return (
                       <div key={pid} className="flex items-center gap-2 text-xs text-slate-500 italic">
@@ -397,6 +421,20 @@ export function PomodoroPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Active free-label input — editable while timer runs (synced to live state at stop time). */}
+            {active && active.topicIds.includes(FREE_PROJECT_ID) && (
+              <div className="mt-2 flex items-center gap-2 flex-wrap">
+                <span className="text-xs" style={{ color: projectById.get(FREE_PROJECT_ID)?.color ?? "#64748b" }}>Free:</span>
+                <input
+                  value={freeTaskLabel}
+                  onChange={e => setFreeTaskLabel(e.target.value)}
+                  placeholder="What are you working on?"
+                  maxLength={200}
+                  className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
+                />
               </div>
             )}
 
@@ -493,15 +531,13 @@ export function PomodoroPage() {
                 const min = pomDurMin(p);
                 return (
                   <tr key={p.id} onClick={() => setSelectedId(p.id)}
-                      className="border-t border-slate-800 hover:bg-slate-900/60 cursor-pointer">
-                    <td className="px-3 py-1.5 text-xs text-slate-400 whitespace-nowrap">{new Date(p.started_at).toLocaleString()}</td>
-                    <td className="px-3 py-1.5 text-xs text-slate-300 whitespace-nowrap">{formatDuration(min, settings.workdayHours)}</td>
-                    <td className="px-3 py-1.5">
-                      <div className="flex flex-col items-start gap-1">
-                        <PomodoroChips pomodoro={p} />
-                      </div>
+                      className="border-t border-slate-800 hover:bg-slate-900/60 cursor-pointer align-top">
+                    <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{new Date(p.started_at).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-xs text-slate-300 whitespace-nowrap">{formatDuration(min, settings.workdayHours)}</td>
+                    <td className="px-3 py-2">
+                      <PomodoroProjectsCell pomodoro={p} />
                     </td>
-                    <td className="px-3 py-1.5 text-xs text-slate-400 truncate max-w-md">{p.notes}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400 truncate max-w-md">{p.notes}</td>
                   </tr>
                 );
               })}
@@ -525,6 +561,7 @@ export function PomodoroPage() {
           onCancel={() => {
             setPickedProjects(postFlow.pomodoro.project_ids);
             setPickedTasks(postFlow.pomodoro.task_ids);
+            setFreeTaskLabel(postFlow.pomodoro.freeTaskLabel ?? "");
             setDuration(postFlow.pomodoro.target_duration_minutes);
             setPostFlow(null);
           }}
@@ -535,6 +572,7 @@ export function PomodoroPage() {
               projectIds: postFlow.pomodoro.project_ids,
               taskIds: postFlow.pomodoro.task_ids,
               durationMinutes: postFlow.pomodoro.target_duration_minutes,
+              freeTaskLabel: postFlow.pomodoro.freeTaskLabel ?? "",
             };
             const restMin = Number.isFinite(settings.restMinutes) && settings.restMinutes > 0 ? settings.restMinutes : 5;
             const restEndsAt = Date.now() + restMin * 60_000;
@@ -550,7 +588,7 @@ export function PomodoroPage() {
               projectIds: postFlow.pomodoro.project_ids,
               taskIds: postFlow.pomodoro.task_ids,
               durationMinutes: postFlow.pomodoro.target_duration_minutes,
-            });
+            }, postFlow.pomodoro.freeTaskLabel ?? "");
           }}
         />
       )}
@@ -563,11 +601,12 @@ export function PomodoroPage() {
           onContinue={async () => {
             const proposal = postFlow.proposal;
             setPostFlow(null);
-            await startTimerFromProposal(proposal);
+            await startTimerFromProposal(proposal, proposal.freeTaskLabel ?? "");
           }}
           onCancel={() => {
             setPickedProjects(postFlow.proposal.projectIds);
             setPickedTasks(postFlow.proposal.taskIds);
+            setFreeTaskLabel(postFlow.proposal.freeTaskLabel ?? "");
             setDuration(postFlow.proposal.durationMinutes);
             setPostFlow(null);
           }}
@@ -581,10 +620,56 @@ export function PomodoroPage() {
   );
 }
 
+/**
+ * Compact per-project block for the Recent table cell.
+ * One block per project: colored swatch + project name on first line, tasks
+ * indented as "· task" lines below. Free with a freeTaskLabel renders the
+ * label as a single bullet. Project with no tasks renders the project alone.
+ */
+function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
+  const { projectById, taskById } = useProjects();
+  const tasksByProj = new Map<string, string[]>();
+  for (const tid of pomodoro.task_ids) {
+    const t = taskById.get(tid);
+    if (!t) continue;
+    const arr = tasksByProj.get(t.project_id);
+    if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
+  }
+  return (
+    <div className="space-y-1.5">
+      {pomodoro.project_ids.map(pid => {
+        const proj = projectById.get(pid);
+        const color = proj?.color ?? "#475569";
+        const tasks = tasksByProj.get(pid) ?? [];
+        const lines: string[] = [];
+        if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
+          lines.push(pomodoro.freeTaskLabel);
+        } else if (tasks.length > 0) {
+          for (const tid of tasks) lines.push(taskById.get(tid)?.name ?? "[deleted]");
+        }
+        return (
+          <div key={pid} className="flex flex-col text-xs">
+            <span className="flex items-center gap-1.5 font-semibold">
+              <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: color }} />
+              <span className="text-slate-200">{proj?.name ?? "[deleted]"}</span>
+            </span>
+            {lines.length === 0 ? (
+              <span className="ml-3.5 text-slate-500 italic">(project-level)</span>
+            ) : (
+              lines.map((l, i) => <span key={i} className="ml-3.5 text-slate-300">· {l}</span>)
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PomodoroChips({ pomodoro }: { pomodoro: Pomodoro }) {
   const { projectById, taskById } = useProjects();
-  // For each project: if it has tasks picked, render a chip per task; else render the project chip.
-  const chips: { key: string; project: Project | undefined; task?: ReturnType<typeof taskById.get> }[] = [];
+  // For each project: render a chip per task. Free with a freeTaskLabel renders as
+  // "Free › <label>" using the chip's `label` prop (no Task object needed).
+  const chips: { key: string; project: Project | undefined; task?: ReturnType<typeof taskById.get>; label?: string }[] = [];
   const tasksByProj = new Map<string, string[]>();
   for (const tid of pomodoro.task_ids) {
     const t = taskById.get(tid);
@@ -595,6 +680,10 @@ export function PomodoroChips({ pomodoro }: { pomodoro: Pomodoro }) {
   for (const pid of pomodoro.project_ids) {
     const proj = projectById.get(pid);
     const tasks = tasksByProj.get(pid) ?? [];
+    if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
+      chips.push({ key: pid, project: proj, label: `${proj?.name ?? "Free"} › ${pomodoro.freeTaskLabel}` });
+      continue;
+    }
     if (tasks.length === 0) {
       chips.push({ key: pid, project: proj });
     } else {
@@ -605,7 +694,7 @@ export function PomodoroChips({ pomodoro }: { pomodoro: Pomodoro }) {
     <>
       {chips.map(c => (
         <ProjectChip key={c.key} project={c.project} task={c.task ?? null}
-          label={c.project ? undefined : "[deleted]"} />
+          label={c.label ?? (c.project ? undefined : "[deleted]")} />
       ))}
     </>
   );
@@ -712,6 +801,7 @@ function ManualPomodoroModal({ onClose, onSaved, projects }: {
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [taskIds, setTaskIds] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
+  const [freeLabel, setFreeLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -738,7 +828,9 @@ function ManualPomodoroModal({ onClose, onSaved, projects }: {
     setBusy(true);
     const r = await apiRequest<Pomodoro>("POST", "/api/pomodoros", {
       started_at: startedAt, ended_at: endedAt, target_duration_minutes: target,
-      project_ids: projectIds, task_ids: taskIds, notes, source: "manual",
+      project_ids: projectIds, task_ids: taskIds, notes,
+      freeTaskLabel: projectIds.includes(FREE_PROJECT_ID) ? freeLabel.trim() : "",
+      source: "manual",
     });
     setBusy(false);
     if (!r.ok) { setError((r.body as { error: string }).error); return; }
@@ -779,6 +871,21 @@ function ManualPomodoroModal({ onClose, onSaved, projects }: {
             <span className="text-sm text-slate-300">Tasks (optional)</span>
             <div className="mt-1 space-y-1">
               {projectIds.map(pid => {
+                if (pid === FREE_PROJECT_ID) {
+                  const proj = projects.find(p => p.id === pid);
+                  return (
+                    <div key={pid} className="flex flex-wrap items-center gap-1">
+                      <span className="text-xs" style={{ color: proj?.color }}>{proj?.name ?? "Free"}:</span>
+                      <input
+                        value={freeLabel}
+                        onChange={e => setFreeLabel(e.target.value)}
+                        placeholder="What were you working on?"
+                        maxLength={200}
+                        className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
+                      />
+                    </div>
+                  );
+                }
                 const tasks = (tasksByProject.get(pid) ?? []).filter(t => !t.completed_at);
                 if (tasks.length === 0) return null;
                 const proj = projects.find(p => p.id === pid);

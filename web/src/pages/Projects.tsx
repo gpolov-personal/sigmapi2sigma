@@ -741,8 +741,10 @@ function TaskRow({ task, mins, workdayHours, onToggle, onDelete, busy, done }: {
   done?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [name, setName] = useState(task.name);
   const [notes, setNotes] = useState(task.notes);
+  const [savingNotes, setSavingNotes] = useState(false);
   const { updateTask } = useProjects();
   async function save() {
     try {
@@ -750,6 +752,13 @@ function TaskRow({ task, mins, workdayHours, onToggle, onDelete, busy, done }: {
       setEditing(false);
     } catch {}
   }
+  async function saveNotesOnly() {
+    if (notes === task.notes) return;
+    setSavingNotes(true);
+    try { await updateTask(task.id, { notes }); }
+    finally { setSavingNotes(false); }
+  }
+  const hasNotes = !!task.notes && task.notes.trim().length > 0;
   return (
     <div className={`flex items-start gap-2 py-1 ${done ? "opacity-60" : ""}`}>
       <button onClick={() => onToggle(task)} disabled={busy} className="mt-0.5 text-slate-400 hover:text-white">
@@ -771,13 +780,34 @@ function TaskRow({ task, mins, workdayHours, onToggle, onDelete, busy, done }: {
         <div className="flex-1 min-w-0">
           <div className={`text-sm flex items-center gap-2 ${done ? "line-through text-slate-500" : "text-slate-200"}`}>
             <span className="flex-1 truncate">{task.name}</span>
+            {hasNotes && <span title="Has notes" className="text-xs">📝</span>}
             {mins > 0 && <span className="text-xs text-slate-500 shrink-0">{formatDuration(mins, workdayHours)}</span>}
           </div>
-          {task.notes && <div className="text-xs text-slate-500 truncate">{task.notes.split("\n")[0]}</div>}
+          {notesOpen && (
+            <div className="mt-1">
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                onBlur={saveNotesOnly}
+                rows={3}
+                placeholder="task notes (saved on blur)"
+                className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+              />
+              {savingNotes && <span className="text-[10px] text-slate-500">saving…</span>}
+            </div>
+          )}
+          {!notesOpen && hasNotes && (
+            <div className="text-xs text-slate-400 whitespace-pre-wrap">{task.notes}</div>
+          )}
         </div>
       )}
       {!editing && (
         <>
+          <button
+            onClick={() => setNotesOpen(o => !o)}
+            className={`text-xs hover:text-white ${notesOpen || hasNotes ? "text-slate-300" : "text-slate-500"}`}
+            title={notesOpen ? "Hide notes editor" : hasNotes ? "Edit notes" : "Add notes"}
+          >{notesOpen ? "✕ notes" : (hasNotes ? "✏ notes" : "+ notes")}</button>
           <button onClick={() => setEditing(true)} className="text-xs text-slate-500 hover:text-white">edit</button>
           <button onClick={() => onDelete(task)} disabled={busy} className="text-xs text-slate-500 hover:text-red-400"><Trash2 size={12} /></button>
         </>

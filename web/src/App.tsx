@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { Sessions } from "./pages/Sessions";
 import { TmuxMap } from "./pages/TmuxMap";
@@ -10,6 +10,7 @@ import { Calendar } from "./pages/Calendar";
 import { SettingsProvider } from "./SettingsContext";
 import { ProjectsProvider } from "./ProjectsContext";
 import { SettingsModal } from "./components/SettingsModal";
+import { fmtMmSs, loadActive, loadRest } from "./lib/liveTimer";
 
 type Tab = "sessions" | "tmux" | "shell" | "snapshots" | "projects" | "pomodoro" | "calendar";
 
@@ -22,6 +23,34 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "pomodoro", label: "Pomodoro" },
   { id: "calendar", label: "Calendar" },
 ];
+
+// Compute the dynamic suffix for the Pomodoro tab (Work / Break / Done countdown).
+// Reads localStorage every tick; cheap (~µs).
+function usePomodoroTabLabel(): string {
+  const [label, setLabel] = useState("Pomodoro");
+  useEffect(() => {
+    const tick = () => {
+      const rest = loadRest();
+      if (rest) {
+        const remaining = rest.restEndsAt - Date.now();
+        if (remaining > 0) { setLabel(`Pomodoro · Break ${fmtMmSs(remaining)}`); return; }
+        setLabel("Pomodoro · Break done"); return;
+      }
+      const active = loadActive();
+      if (active) {
+        const targetMs = active.targetDurationMinutes * 60_000;
+        const remaining = targetMs - (Date.now() - active.startedAt);
+        if (remaining > 0) { setLabel(`Pomodoro · Work ${fmtMmSs(remaining)}`); return; }
+        setLabel("Pomodoro · Done"); return;
+      }
+      setLabel("Pomodoro");
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return label;
+}
 
 export function App() {
   return (
@@ -36,6 +65,7 @@ export function App() {
 function AppInner() {
   const [tab, setTab] = useState<Tab>("sessions");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const pomodoroLabel = usePomodoroTabLabel();
   return (
     <div className="flex flex-col h-full">
       <header className="flex items-center gap-6 px-6 py-3 border-b border-slate-800 bg-slate-900">
@@ -53,7 +83,7 @@ function AppInner() {
                   : "text-slate-400 hover:text-white hover:bg-slate-800"
               }`}
             >
-              {t.label}
+              {t.id === "pomodoro" ? pomodoroLabel : t.label}
             </button>
           ))}
         </nav>
