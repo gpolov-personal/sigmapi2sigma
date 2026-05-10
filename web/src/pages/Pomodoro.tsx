@@ -644,9 +644,14 @@ function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
       {pomodoro.project_ids.map(pid => {
         const proj = projectById.get(pid);
         const tasks = tasksByProj.get(pid) ?? [];
+        const hasTasks =
+          pid === FREE_PROJECT_ID
+            ? !!pomodoro.freeTaskLabel
+            : tasks.length > 0;
         return (
           <div key={pid} className="flex flex-wrap items-center gap-1">
             <ProjectChip project={proj} label={proj?.name ?? "[deleted]"} />
+            {hasTasks && <span className="text-slate-500 mx-0.5" aria-hidden>→</span>}
             {pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel && (
               <ProjectChip color="#ffffff" label={pomodoro.freeTaskLabel} />
             )}
