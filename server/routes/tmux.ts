@@ -1,9 +1,13 @@
 import { Router } from "express";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { buildTmuxTree, capturePane, createDetachedSession, isTmuxRunning } from "../lib/tmux.js";
 import { DATA_DIR } from "../lib/pathEncoding.js";
 import { expandHome } from "../lib/paths.js";
+
+const pexec = promisify(execFile);
 
 export const tmuxRouter = Router();
 
@@ -59,6 +63,28 @@ tmuxRouter.post("/tmux/sessions", async (req, res) => {
       });
     }
     res.status(500).json({ error: String(e?.message ?? e) });
+  }
+});
+
+// Kill a tmux session by name. Used by the "Save & kill" flow in TmuxMap —
+// the frontend posts to /api/saved-tmux/pin first, then here.
+tmuxRouter.post("/tmux/sessions/:name/kill", async (req, res) => {
+  const name = req.params.name;
+  if (typeof name !== "string" || name.length < 1 || name.length > 100) {
+    return res.status(400).json({ error: "name must be 1-100 chars" });
+  }
+  if (/[\s.:]/.test(name)) {
+    return res.status(400).json({ error: "tmux session name cannot contain spaces, '.' or ':'" });
+  }
+  try {
+    await pexec("tmux", ["kill-session", "-t", `=${name}`]);
+    res.json({ ok: true });
+  } catch (e: any) {
+    const msg = String(e?.stderr ?? e?.message ?? "");
+    if (msg.includes("can't find session") || msg.includes("no server")) {
+      return res.status(404).json({ error: `tmux session "${name}" not found (already gone)` });
+    }
+    res.status(500).json({ error: msg });
   }
 });
 
