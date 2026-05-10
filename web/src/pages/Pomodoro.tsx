@@ -163,8 +163,12 @@ export function PomodoroPage() {
     if (settings.audioEnabled) playBeep(settings.endBeepSound);
     const names = active.topicIds.map(id => projectById.get(id)?.name ?? id.slice(0, 6)).join(", ");
     if (settings.notificationsEnabled) notify("Pomodoro complete", names);
-    finalizePomodoro(active, targetMs);
-  }, [active, now, targetMs, settings.audioEnabled, settings.notificationsEnabled, settings.endBeepSound, projectById, finalizePomodoro]);
+    // Sync the latest taskIds + freeTaskLabel from React state into the timer
+    // before finalizing — covers the case where the user edited either during
+    // a running pomodoro and let it auto-complete.
+    const synced: LiveTimerState = { ...active, taskIds: pickedTasks, freeTaskLabel: freeTaskLabel.trim() };
+    finalizePomodoro(synced, targetMs);
+  }, [active, now, targetMs, settings.audioEnabled, settings.notificationsEnabled, settings.endBeepSound, projectById, finalizePomodoro, pickedTasks, freeTaskLabel]);
 
   // End-of-rest watcher — same dedup pattern.
   const firedRestEndRef = useRef<number | null>(null);
@@ -621,10 +625,10 @@ export function PomodoroPage() {
 }
 
 /**
- * Recent table cell — one row per project. Each row shows a colored swatch
- * + bold colored project name + ":" + the project's tasks inline as dot-
- * separated regular-weight text. Free project's freeTaskLabel takes the
- * task slot. Project with no tasks shows "(project-level)" italic.
+ * Recent table cell — one row per project. Each row: a project-colored pill
+ * with the project name, followed by white pills (black text) for each task.
+ * Free project's freeTaskLabel renders as a single white pill. Project with
+ * no tasks shows "(project-level)" italic in the same row.
  */
 function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
   const { projectById, taskById } = useProjects();
@@ -636,32 +640,25 @@ function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
     if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
   }
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       {pomodoro.project_ids.map(pid => {
         const proj = projectById.get(pid);
-        const color = proj?.color ?? "#94a3b8";
         const tasks = tasksByProj.get(pid) ?? [];
-        let taskNode: React.ReactNode;
-        if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
-          taskNode = <span className="text-slate-200">{pomodoro.freeTaskLabel}</span>;
-        } else if (tasks.length === 0) {
-          taskNode = <span className="text-slate-500 italic">(project-level)</span>;
-        } else {
-          taskNode = tasks.map((tid, i) => (
-            <Fragment key={tid}>
-              {i > 0 && <span className="text-slate-600 mx-1.5">·</span>}
-              <span className="text-slate-200">{taskById.get(tid)?.name ?? "[deleted]"}</span>
-            </Fragment>
-          ));
-        }
         return (
-          <div key={pid} className="flex items-baseline gap-2 text-xs">
-            <span className="w-2 h-2 rounded-sm shrink-0 self-center" style={{ backgroundColor: color }} />
-            <span className="font-semibold whitespace-nowrap" style={{ color }}>
-              {proj?.name ?? "[deleted]"}
-            </span>
-            <span className="text-slate-500">:</span>
-            <span className="min-w-0">{taskNode}</span>
+          <div key={pid} className="flex flex-wrap items-center gap-1">
+            <ProjectChip project={proj} label={proj?.name ?? "[deleted]"} />
+            {pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel && (
+              <ProjectChip color="#ffffff" label={pomodoro.freeTaskLabel} />
+            )}
+            {pid === FREE_PROJECT_ID && !pomodoro.freeTaskLabel && (
+              <span className="text-xs text-slate-500 italic">(no label)</span>
+            )}
+            {pid !== FREE_PROJECT_ID && tasks.length === 0 && (
+              <span className="text-xs text-slate-500 italic">(project-level)</span>
+            )}
+            {pid !== FREE_PROJECT_ID && tasks.map(tid => (
+              <ProjectChip key={tid} color="#ffffff" label={taskById.get(tid)?.name ?? "[deleted]"} />
+            ))}
           </div>
         );
       })}
