@@ -21,6 +21,9 @@ export interface Pomodoro {
   project_ids: string[];      // ≥1
   task_ids: string[];         // ≥0; every task's project must be in project_ids
   notes: string;
+  /** Per-pomodoro task label for the Free project. Empty when Free isn't selected
+   *  or when the user didn't type one. Acts as the "task name" analog for Free. */
+  freeTaskLabel: string;
   source: "live-timer" | "manual";
   context: {
     tmux_session_names: string[];
@@ -66,6 +69,13 @@ async function captureContext(
   return { tmux_session_names, claude_session_ids: [...sids] };
 }
 
+// Backfill missing freeTaskLabel for old records. Pure read-time normalization;
+// not persisted unless the record is otherwise updated.
+function normalize(p: Pomodoro): Pomodoro {
+  if (typeof p.freeTaskLabel !== "string") return { ...p, freeTaskLabel: "" };
+  return p;
+}
+
 pomodorosRouter.get("/pomodoros", async (req, res) => {
   const file = await readJsonSafe<PomFile>(POMODOROS_FILE, EMPTY_P);
   const from = typeof req.query.from === "string" ? Date.parse(req.query.from) : null;
@@ -81,14 +91,14 @@ pomodorosRouter.get("/pomodoros", async (req, res) => {
     return true;
   });
   filtered.sort((a, b) => b.started_at.localeCompare(a.started_at));
-  res.json({ pomodoros: filtered });
+  res.json({ pomodoros: filtered.map(normalize) });
 });
 
 pomodorosRouter.get("/pomodoros/:id", async (req, res) => {
   const file = await readJsonSafe<PomFile>(POMODOROS_FILE, EMPTY_P);
   const p = file.pomodoros.find(x => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: "pomodoro not found" });
-  res.json(p);
+  res.json(normalize(p));
 });
 
 pomodorosRouter.get("/pomodoros/:id/activity", async (req, res) => {
@@ -107,7 +117,7 @@ pomodorosRouter.get("/pomodoros/:id/activity", async (req, res) => {
 
 pomodorosRouter.post("/pomodoros", async (req, res) => {
   const body = req.body ?? {};
-  const { started_at, ended_at, target_duration_minutes, project_ids, task_ids, notes, source, context } = body;
+  const { started_at, ended_at, target_duration_minutes, project_ids, task_ids, notes, freeTaskLabel, source, context } = body;
 
   if (typeof started_at !== "string" || !Number.isFinite(Date.parse(started_at))) {
     return res.status(400).json({ error: "started_at must be ISO string" });
@@ -127,6 +137,9 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
   const tIds: string[] = Array.isArray(task_ids) ? task_ids : [];
   if (notes !== undefined && (typeof notes !== "string" || notes.length > 8000)) {
     return res.status(400).json({ error: "notes must be string ≤8000 chars" });
+  }
+  if (freeTaskLabel !== undefined && (typeof freeTaskLabel !== "string" || freeTaskLabel.length > 200)) {
+    return res.status(400).json({ error: "freeTaskLabel must be string ≤200 chars" });
   }
   if (source !== "live-timer" && source !== "manual") {
     return res.status(400).json({ error: "source must be live-timer or manual" });
@@ -168,6 +181,7 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
     project_ids,
     task_ids: tIds,
     notes: notes ?? "",
+    freeTaskLabel: typeof freeTaskLabel === "string" ? freeTaskLabel : "",
     source,
     context: ctx,
   };
@@ -180,17 +194,21 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
 
 pomodorosRouter.patch("/pomodoros/:id", async (req, res) => {
   const body = req.body ?? {};
-  const allowed = new Set(["notes"]);
+  const allowed = new Set(["notes", "freeTaskLabel"]);
   for (const k of Object.keys(body)) {
     if (!allowed.has(k)) return res.status(400).json({ error: `field not patchable: ${k}` });
   }
   if (body.notes !== undefined && (typeof body.notes !== "string" || body.notes.length > 8000)) {
     return res.status(400).json({ error: "notes must be string ≤8000 chars" });
   }
+  if (body.freeTaskLabel !== undefined && (typeof body.freeTaskLabel !== "string" || body.freeTaskLabel.length > 200)) {
+    return res.status(400).json({ error: "freeTaskLabel must be string ≤200 chars" });
+  }
   const file = await readJsonSafe<PomFile>(POMODOROS_FILE, EMPTY_P);
   const idx = file.pomodoros.findIndex(p => p.id === req.params.id);
   if (idx < 0) return res.status(404).json({ error: "pomodoro not found" });
   if (body.notes !== undefined) file.pomodoros[idx].notes = body.notes;
+  if (body.freeTaskLabel !== undefined) file.pomodoros[idx].freeTaskLabel = body.freeTaskLabel;
   await writeJsonAtomic(POMODOROS_FILE, file);
-  res.json(file.pomodoros[idx]);
+  res.json(normalize(file.pomodoros[idx]));
 });

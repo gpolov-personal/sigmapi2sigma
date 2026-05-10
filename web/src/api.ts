@@ -138,6 +138,9 @@ export interface Pomodoro {
   project_ids: string[];        // ≥1
   task_ids: string[];           // ≥0
   notes: string;
+  /** Per-pomodoro task label for the Free project. Empty when Free isn't picked
+   *  or the user didn't type a label. Renders as "Free › <label>" in chips. */
+  freeTaskLabel: string;
   source: "live-timer" | "manual";
   context: {
     tmux_session_names: string[];

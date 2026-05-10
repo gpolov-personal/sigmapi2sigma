@@ -1,9 +1,8 @@
 import { useEffect, useState, ReactElement } from "react";
 import { X } from "lucide-react";
-import { ActivitySlice, Pomodoro, apiRequest } from "../api";
+import { ActivitySlice, Pomodoro, apiRequest, FREE_PROJECT_ID } from "../api";
 import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
-import { ProjectChip } from "./ProjectChip";
 import { formatDuration } from "../utils";
 
 interface Props { pomodoroId: string; onClose: () => void; }
@@ -87,9 +86,9 @@ export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
 
-        <div className="flex flex-wrap gap-1 mb-4">
+        <div className="space-y-2 mb-4">
           {(() => {
-            // Build the same chip list as the recent table.
+            // Per-project blocks: colored stripe + project name + indented task list.
             const tasksByProj = new Map<string, string[]>();
             for (const tid of pomodoro.task_ids) {
               const t = taskById.get(tid);
@@ -101,14 +100,27 @@ export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
             for (const pid of pomodoro.project_ids) {
               const proj = projectById.get(pid);
               const tasks = tasksByProj.get(pid) ?? [];
-              if (tasks.length === 0) {
-                out.push(<ProjectChip key={pid} project={proj} label={proj ? undefined : `[deleted]`} />);
+              const taskLines: ReactElement[] = [];
+              if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
+                taskLines.push(<li key="free" className="text-sm text-slate-200">› {pomodoro.freeTaskLabel}</li>);
+              } else if (tasks.length === 0) {
+                taskLines.push(<li key="none" className="text-xs italic text-slate-500">(project-level — no specific task)</li>);
               } else {
                 for (const tid of tasks) {
                   const t = taskById.get(tid);
-                  out.push(<ProjectChip key={`${pid}:${tid}`} project={proj} task={t ?? null} label={proj ? undefined : `[deleted]`} />);
+                  taskLines.push(<li key={tid} className="text-sm text-slate-200">› {t?.name ?? "[deleted task]"}</li>);
                 }
               }
+              out.push(
+                <div
+                  key={pid}
+                  className="border border-slate-800 rounded bg-slate-950/40 px-3 py-2"
+                  style={{ borderLeft: `4px solid ${proj?.color ?? "#475569"}` }}
+                >
+                  <div className="text-sm font-semibold text-slate-100">{proj?.name ?? "[deleted project]"}</div>
+                  <ul className="mt-1 space-y-0.5">{taskLines}</ul>
+                </div>
+              );
             }
             return out;
           })()}

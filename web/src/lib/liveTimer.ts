@@ -5,7 +5,7 @@ const REST_KEY = "csv:active-rest";
 
 export interface LiveRestState {
   restEndsAt: number;
-  proposal: { projectIds: string[]; taskIds: string[]; durationMinutes: number };
+  proposal: { projectIds: string[]; taskIds: string[]; durationMinutes: number; freeTaskLabel?: string };
 }
 
 export function loadRest(): LiveRestState | null {
@@ -19,7 +19,17 @@ export function loadRest(): LiveRestState | null {
       Array.isArray(v.proposal.projectIds) &&
       Array.isArray(v.proposal.taskIds) &&
       typeof v.proposal.durationMinutes === "number"
-    ) return v as LiveRestState;
+    ) {
+      return {
+        restEndsAt: v.restEndsAt,
+        proposal: {
+          projectIds: v.proposal.projectIds,
+          taskIds: v.proposal.taskIds,
+          durationMinutes: v.proposal.durationMinutes,
+          freeTaskLabel: typeof v.proposal.freeTaskLabel === "string" ? v.proposal.freeTaskLabel : "",
+        },
+      };
+    }
   } catch {}
   return null;
 }
@@ -37,6 +47,7 @@ export interface LiveTimerState {
   targetDurationMinutes: number;
   topicIds: string[];        // legacy field name kept for backwards compat: holds project IDs
   taskIds?: string[];        // optional, defaults to [] on load
+  freeTaskLabel?: string;    // optional Free-project label, defaults to "" on load
 }
 
 export function loadActive(): LiveTimerState | null {
@@ -54,6 +65,7 @@ export function loadActive(): LiveTimerState | null {
         targetDurationMinutes: v.targetDurationMinutes,
         topicIds: v.topicIds,
         taskIds: Array.isArray(v.taskIds) ? v.taskIds : [],
+        freeTaskLabel: typeof v.freeTaskLabel === "string" ? v.freeTaskLabel : "",
       };
     }
   } catch {}
