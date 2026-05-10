@@ -1,7 +1,7 @@
 {
   "name": "sigmapi2sigma",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k --kill-signal SIGTERM -n server,web -c blue,green \"npm run dev:server\" \"npm run dev:web\"",
