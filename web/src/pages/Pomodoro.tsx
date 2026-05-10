@@ -531,15 +531,13 @@ export function PomodoroPage() {
                 const min = pomDurMin(p);
                 return (
                   <tr key={p.id} onClick={() => setSelectedId(p.id)}
-                      className="border-t border-slate-800 hover:bg-slate-900/60 cursor-pointer">
-                    <td className="px-3 py-1.5 text-xs text-slate-400 whitespace-nowrap">{new Date(p.started_at).toLocaleString()}</td>
-                    <td className="px-3 py-1.5 text-xs text-slate-300 whitespace-nowrap">{formatDuration(min, settings.workdayHours)}</td>
-                    <td className="px-3 py-1.5">
-                      <div className="flex flex-col items-start gap-1">
-                        <PomodoroChips pomodoro={p} />
-                      </div>
+                      className="border-t border-slate-800 hover:bg-slate-900/60 cursor-pointer align-top">
+                    <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{new Date(p.started_at).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-xs text-slate-300 whitespace-nowrap">{formatDuration(min, settings.workdayHours)}</td>
+                    <td className="px-3 py-2">
+                      <PomodoroProjectsCell pomodoro={p} />
                     </td>
-                    <td className="px-3 py-1.5 text-xs text-slate-400 truncate max-w-md">{p.notes}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400 truncate max-w-md">{p.notes}</td>
                   </tr>
                 );
               })}
@@ -618,6 +616,51 @@ export function PomodoroPage() {
       {selectedId && (
         <PomodoroDetailDrawer pomodoroId={selectedId} onClose={() => setSelectedId(null)} />
       )}
+    </div>
+  );
+}
+
+/**
+ * Compact per-project block for the Recent table cell.
+ * One block per project: colored swatch + project name on first line, tasks
+ * indented as "· task" lines below. Free with a freeTaskLabel renders the
+ * label as a single bullet. Project with no tasks renders the project alone.
+ */
+function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
+  const { projectById, taskById } = useProjects();
+  const tasksByProj = new Map<string, string[]>();
+  for (const tid of pomodoro.task_ids) {
+    const t = taskById.get(tid);
+    if (!t) continue;
+    const arr = tasksByProj.get(t.project_id);
+    if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
+  }
+  return (
+    <div className="space-y-1.5">
+      {pomodoro.project_ids.map(pid => {
+        const proj = projectById.get(pid);
+        const color = proj?.color ?? "#475569";
+        const tasks = tasksByProj.get(pid) ?? [];
+        const lines: string[] = [];
+        if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
+          lines.push(pomodoro.freeTaskLabel);
+        } else if (tasks.length > 0) {
+          for (const tid of tasks) lines.push(taskById.get(tid)?.name ?? "[deleted]");
+        }
+        return (
+          <div key={pid} className="flex flex-col text-xs">
+            <span className="flex items-center gap-1.5 font-semibold">
+              <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: color }} />
+              <span className="text-slate-200">{proj?.name ?? "[deleted]"}</span>
+            </span>
+            {lines.length === 0 ? (
+              <span className="ml-3.5 text-slate-500 italic">(project-level)</span>
+            ) : (
+              lines.map((l, i) => <span key={i} className="ml-3.5 text-slate-300">· {l}</span>)
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
