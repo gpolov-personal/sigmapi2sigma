@@ -621,9 +621,10 @@ export function PomodoroPage() {
 }
 
 /**
- * Compact chips for the Recent table cell. One chip per task (or per project
- * if it has no tasks; or per Free freeTaskLabel). A bold "‖" separates chips
- * that belong to different projects. Single line, wraps if needed.
+ * Recent table cell — one row per project. Each row shows a colored swatch
+ * + bold colored project name + ":" + the project's tasks inline as dot-
+ * separated regular-weight text. Free project's freeTaskLabel takes the
+ * task slot. Project with no tasks shows "(project-level)" italic.
  */
 function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
   const { projectById, taskById } = useProjects();
@@ -634,37 +635,36 @@ function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
     const arr = tasksByProj.get(t.project_id);
     if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
   }
-  // Build groups: one per project, each with its list of chips to render.
-  const groups = pomodoro.project_ids.map(pid => {
-    const proj = projectById.get(pid);
-    const tasks = tasksByProj.get(pid) ?? [];
-    const chips: { key: string; project: typeof proj; task?: Task | null; label?: string }[] = [];
-    if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
-      chips.push({ key: pid, project: proj, label: `${proj?.name ?? "Free"} › ${pomodoro.freeTaskLabel}` });
-    } else if (tasks.length === 0) {
-      chips.push({ key: pid, project: proj });
-    } else {
-      for (const tid of tasks) chips.push({ key: `${pid}:${tid}`, project: proj, task: taskById.get(tid) ?? null });
-    }
-    return { pid, chips };
-  });
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {groups.map((g, gi) => (
-        <Fragment key={g.pid}>
-          {gi > 0 && (
-            <span className="font-black text-slate-400 mx-1 select-none" aria-hidden>‖</span>
-          )}
-          {g.chips.map(c => (
-            <ProjectChip
-              key={c.key}
-              project={c.project}
-              task={c.task ?? null}
-              label={c.label ?? (c.project ? undefined : "[deleted]")}
-            />
-          ))}
-        </Fragment>
-      ))}
+    <div className="space-y-0.5">
+      {pomodoro.project_ids.map(pid => {
+        const proj = projectById.get(pid);
+        const color = proj?.color ?? "#94a3b8";
+        const tasks = tasksByProj.get(pid) ?? [];
+        let taskNode: React.ReactNode;
+        if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
+          taskNode = <span className="text-slate-200">{pomodoro.freeTaskLabel}</span>;
+        } else if (tasks.length === 0) {
+          taskNode = <span className="text-slate-500 italic">(project-level)</span>;
+        } else {
+          taskNode = tasks.map((tid, i) => (
+            <Fragment key={tid}>
+              {i > 0 && <span className="text-slate-600 mx-1.5">·</span>}
+              <span className="text-slate-200">{taskById.get(tid)?.name ?? "[deleted]"}</span>
+            </Fragment>
+          ));
+        }
+        return (
+          <div key={pid} className="flex items-baseline gap-2 text-xs">
+            <span className="w-2 h-2 rounded-sm shrink-0 self-center" style={{ backgroundColor: color }} />
+            <span className="font-semibold whitespace-nowrap" style={{ color }}>
+              {proj?.name ?? "[deleted]"}
+            </span>
+            <span className="text-slate-500">:</span>
+            <span className="min-w-0">{taskNode}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
