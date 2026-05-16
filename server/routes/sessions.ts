@@ -6,13 +6,24 @@ export const sessionsRouter = Router();
 
 sessionsRouter.get("/sessions", async (req, res) => {
   const hours = Number(req.query.hours ?? 24);
-  const cutoff = Number.isFinite(hours) && hours > 0
-    ? Date.now() - hours * 3600 * 1000
-    : 0;
+  const useWindow = Number.isFinite(hours) && hours > 0;
 
   const files = await listAllSessionFiles();
-  const metas = (await Promise.all(files.map(readSessionMeta)))
-    .filter((m): m is NonNullable<typeof m> => !!m)
+  const allMetas = (await Promise.all(files.map(readSessionMeta)))
+    .filter((m): m is NonNullable<typeof m> => !!m);
+
+  // Anchor = max(mtime) across ALL sessions, regardless of the window filter.
+  // The window is then [anchor - hours*3600*1000, anchor].
+  const anchorMs = allMetas.length > 0
+    ? Math.max(...allMetas.map(m => m.mtime))
+    : null;
+  const anchorIso = anchorMs !== null ? new Date(anchorMs).toISOString() : null;
+
+  const cutoff = useWindow && anchorMs !== null
+    ? anchorMs - hours * 3600 * 1000
+    : 0;
+
+  const metas = allMetas
     .filter(m => m.mtime >= cutoff)
     .sort((a, b) => b.mtime - a.mtime);
 
@@ -28,7 +39,10 @@ sessionsRouter.get("/sessions", async (req, res) => {
     } : null };
   });
 
-  res.json({ sessions: enriched });
+  res.json({
+    sessions: enriched,
+    anchor: useWindow ? anchorIso : null,
+  });
 });
 
 sessionsRouter.get("/sessions/:id", async (req, res) => {
