@@ -61,6 +61,7 @@ export function PomodoroPage() {
   const [active, setActive] = useState<LiveTimerState | null>(() => loadActive());
   const [now, setNow] = useState(Date.now());
   const [pickedProjects, setPickedProjects] = useState<string[]>([]);
+  const [showCompletedInPicker, setShowCompletedInPicker] = useState(false);
   const [pickedTasks, setPickedTasks] = useState<string[]>([]);
   const [freeTaskLabel, setFreeTaskLabel] = useState<string>(() => loadActive()?.freeTaskLabel ?? "");
   const [duration, setDuration] = useState<number>(settings.defaultPomodoroDuration);
@@ -266,7 +267,9 @@ export function PomodoroPage() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [todayPoms, taskById]);
 
-  const eligibleProjects = projects.filter(p => !p.completed_at);
+  const eligibleProjects = showCompletedInPicker
+    ? projects
+    : projects.filter(p => !p.completed_at);
   const eligibleTasksForPicked = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const pid of pickedProjects) {
@@ -369,15 +372,36 @@ export function PomodoroPage() {
             {/* Project picker */}
             <div className="mt-3 flex items-center gap-2 flex-wrap">
               <span className="text-xs text-slate-500">Projects:</span>
+              {!active && (
+                <label className="flex items-center gap-1 text-xs text-slate-400 ml-2">
+                  <input
+                    type="checkbox"
+                    checked={showCompletedInPicker}
+                    onChange={e => setShowCompletedInPicker(e.target.checked)}
+                  />
+                  Show completed
+                </label>
+              )}
               {!active ? (
                 eligibleProjects.length === 0
                   ? <span className="text-xs text-slate-500">No projects.</span>
-                  : eligibleProjects.map(p => (
-                    <button key={p.id} onClick={() => toggleProject(p.id)}
-                      className={`px-2 py-0.5 rounded text-xs border ${pickedProjects.includes(p.id) ? "border-white" : "border-transparent opacity-70 hover:opacity-100"}`}
-                      style={{ backgroundColor: p.color, color: "#fff" }}
-                    >{p.name}</button>
-                  ))
+                  : eligibleProjects.map(p => {
+                    const isCompleted = !!p.completed_at;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={isCompleted ? undefined : () => toggleProject(p.id)}
+                        disabled={isCompleted}
+                        title={isCompleted ? "Project is completed — reopen it from the Projects tab to log time" : undefined}
+                        className={`px-2 py-0.5 rounded text-xs border ${
+                          isCompleted ? "border-transparent opacity-40 cursor-not-allowed" :
+                          pickedProjects.includes(p.id) ? "border-white" : "border-transparent opacity-70 hover:opacity-100"
+                        }`}
+                        style={{ backgroundColor: p.color, color: "#fff" }}
+                      >{p.name}</button>
+                    );
+                  })
               ) : (
                 active.topicIds.map(id => {
                   const p = projectById.get(id);
