@@ -146,12 +146,13 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
   }
 
   const projects = await readJsonSafe<ProjectsFile>(PROJECTS_FILE, EMPTY_PRJ);
-  const startMs = Date.parse(started_at);
   for (const pid of project_ids) {
     const p = projects.projects.find(x => x.id === pid);
     if (!p) return res.status(404).json({ error: `project not found: ${pid}` });
-    if (p.completed_at && Date.parse(p.completed_at) <= startMs) {
-      return res.status(409).json({ error: `project completed before start: ${pid}` });
+    if (p.completed_at) {
+      return res.status(409).json({
+        error: `project '${pid}' is completed — reopen it before logging time`,
+      });
     }
   }
   const tasks = await readJsonSafe<TasksFile>(TASKS_FILE, EMPTY_T);
