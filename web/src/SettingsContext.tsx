@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { apiRequest, Settings } from "./api";
 
 const DEFAULTS: Settings = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   workdayHours: 8,
   defaultPomodoroDuration: 25,
   restMinutes: 5,
@@ -10,6 +10,7 @@ const DEFAULTS: Settings = {
   endBeepSound: "classic",
   audioEnabled: true,
   notificationsEnabled: true,
+  activeWindowHours: 72,
 };
 
 interface Ctx {
