@@ -14,10 +14,11 @@ export interface Settings {
   endBeepSound: BeepSound;
   audioEnabled: boolean;
   notificationsEnabled: boolean;
+  activeWindowHours: number;
 }
 
 const DEFAULTS: Settings = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   workdayHours: 8,
   defaultPomodoroDuration: 25,
   restMinutes: 5,
@@ -25,11 +26,12 @@ const DEFAULTS: Settings = {
   endBeepSound: "classic",
   audioEnabled: true,
   notificationsEnabled: true,
+  activeWindowHours: 72,
 };
 
 const BEEPS: BeepSound[] = ["classic", "chime", "soft"];
 
-// Migrate legacy v1 (had wuMinutes) and v2 (had single beepSound) → v3.
+// Migrate legacy v1 (had wuMinutes), v2 (had single beepSound), v3 (no activeWindowHours) → v4.
 function migrate(loaded: any): Settings {
   if (!loaded || typeof loaded !== "object") return { ...DEFAULTS };
   const merged: any = { ...DEFAULTS, ...loaded };
@@ -41,7 +43,16 @@ function migrate(loaded: any): Settings {
   }
   if (!BEEPS.includes(merged.startBeepSound)) merged.startBeepSound = DEFAULTS.startBeepSound;
   if (!BEEPS.includes(merged.endBeepSound)) merged.endBeepSound = DEFAULTS.endBeepSound;
-  merged.schemaVersion = 3;
+  // v3 → v4: ensure activeWindowHours present and in range.
+  if (
+    typeof merged.activeWindowHours !== "number" ||
+    !Number.isFinite(merged.activeWindowHours) ||
+    merged.activeWindowHours < 1 ||
+    merged.activeWindowHours > 8760
+  ) {
+    merged.activeWindowHours = DEFAULTS.activeWindowHours;
+  }
+  merged.schemaVersion = 4;
   return merged as Settings;
 }
 
@@ -55,7 +66,8 @@ async function loadOrInit(): Promise<Settings> {
   const dirty =
     migrated.schemaVersion !== (cur as any).schemaVersion ||
     (cur as any).wuMinutes !== undefined ||
-    (cur as any).beepSound !== undefined;
+    (cur as any).beepSound !== undefined ||
+    (cur as any).activeWindowHours === undefined;
   if (dirty) await writeJsonAtomic(SETTINGS_FILE, migrated);
   return migrated;
 }
@@ -95,6 +107,15 @@ function validate(patch: any): { error: string } | null {
   ) {
     return { error: "notificationsEnabled must be boolean" };
   }
+  if (patch.activeWindowHours !== undefined) {
+    if (
+      !Number.isInteger(patch.activeWindowHours) ||
+      patch.activeWindowHours < 1 ||
+      patch.activeWindowHours > 8760
+    ) {
+      return { error: "activeWindowHours must be integer 1-8760" };
+    }
+  }
   return null;
 }
 
@@ -121,6 +142,7 @@ settingsRouter.put("/settings", async (req, res) => {
     ...(body.notificationsEnabled !== undefined
       ? { notificationsEnabled: body.notificationsEnabled }
       : {}),
+    ...(body.activeWindowHours !== undefined ? { activeWindowHours: body.activeWindowHours } : {}),
   };
   await writeJsonAtomic(SETTINGS_FILE, next);
   res.json(next);
