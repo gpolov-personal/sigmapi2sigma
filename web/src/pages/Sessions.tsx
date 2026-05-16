@@ -10,6 +10,7 @@ const HOURS_OPTIONS = [1, 6, 24, 72, 168, 0];
 export function Sessions() {
   const [hours, setHours] = useState<number>(24);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [tmux, setTmux] = useState<TmuxResponse | null>(null);
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState<SessionMeta | null>(null);
@@ -20,10 +21,11 @@ export function Sessions() {
     setLoading(true);
     try {
       const [s, t] = await Promise.all([
-        getJSON<{ sessions: SessionMeta[] }>(`/api/sessions?hours=${hours || 999999}`),
+        getJSON<{ sessions: SessionMeta[]; anchor: string | null }>(`/api/sessions?hours=${hours || 999999}`),
         getJSON<TmuxResponse>("/api/tmux"),
       ]);
       setSessions(s.sessions);
+      setAnchor(s.anchor);
       setTmux(t);
     } finally { setLoading(false); }
   }
@@ -90,6 +92,8 @@ export function Sessions() {
         </button>
         <span className="text-sm text-slate-500">{filtered.length} sessions</span>
       </div>
+
+      <AnchorLine anchor={anchor} hours={hours} />
 
       <div className="border border-slate-800 rounded overflow-hidden">
         <table className="w-full text-sm">
@@ -425,6 +429,19 @@ function Field({ label, children }: { label: string; children: any }) {
     <div>
       <div className="text-xs text-slate-500 mb-0.5">{label}</div>
       <div className="font-mono text-sm break-all">{children}</div>
+    </div>
+  );
+}
+
+function AnchorLine({ anchor, hours }: { anchor: string | null; hours: number }) {
+  if (anchor === null || hours <= 0) return null;
+  const end = new Date(anchor);
+  const start = new Date(end.getTime() - hours * 3600 * 1000);
+  const fmt = (d: Date) => d.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
+  return (
+    <div className="text-xs text-slate-500 -mt-2">
+      Anchor: last interaction <span className="text-slate-300">{fmt(end)}</span> —
+      showing sessions <span className="text-slate-300">{fmt(start)}</span> → <span className="text-slate-300">{fmt(end)}</span>
     </div>
   );
 }
