@@ -2,11 +2,15 @@ import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import {
   ASSIGNMENTS_FILE,
+  POMODOROS_FILE,
   PROJECTS_FILE,
+  SETTINGS_FILE,
   TASKS_FILE,
   readJsonSafe,
   writeJsonAtomic,
 } from "../lib/dataStore.js";
+import { deriveProjectStatus, DerivedStatus, ProjectStatusAnchor } from "../lib/projectStatus.js";
+import { buildTmuxTree, isTmuxRunning } from "../lib/tmux.js";
 
 export const projectsRouter = Router();
 
@@ -44,6 +48,21 @@ interface TasksFile {
 const EMPTY_PROJECTS: ProjectsFile = { schemaVersion: 1, projects: [] };
 const EMPTY_ASSIGNMENTS: AssignmentsFile = { schemaVersion: 1, assignments: {} };
 const EMPTY_TASKS: TasksFile = { schemaVersion: 1, tasks: [] };
+
+interface PomFile { schemaVersion: number; pomodoros: { project_ids: string[]; ended_at: string }[] }
+const EMPTY_POMS: PomFile = { schemaVersion: 1, pomodoros: [] };
+
+interface SettingsLite { activeWindowHours?: number }
+
+async function loadLiveSessionNames(): Promise<Set<string>> {
+  if (!(await isTmuxRunning())) return new Set();
+  try {
+    const tree = await buildTmuxTree();
+    return new Set(tree.map(s => s.name));
+  } catch {
+    return new Set();
+  }
+}
 
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const FREE_DEFAULT_COLOR = "#64748b"; // slate-500
@@ -153,7 +172,31 @@ function validateProjectInput(
 
 projectsRouter.get("/projects", async (_req, res) => {
   const file = await loadProjects();
-  res.json({ projects: file.projects });
+
+  const [pomFile, assignFile, settings, liveSessionNames] = await Promise.all([
+    readJsonSafe<PomFile>(POMODOROS_FILE, EMPTY_POMS),
+    readJsonSafe<AssignmentsFile>(ASSIGNMENTS_FILE, EMPTY_ASSIGNMENTS),
+    readJsonSafe<SettingsLite>(SETTINGS_FILE, {}),
+    loadLiveSessionNames(),
+  ]);
+  const activeWindowHours = Number.isFinite(settings.activeWindowHours)
+    ? Math.max(1, Math.min(8760, settings.activeWindowHours as number))
+    : 72;
+
+  const { anchor, byProjectId } = deriveProjectStatus({
+    projects: file.projects,
+    pomodoros: pomFile.pomodoros,
+    assignments: assignFile.assignments,
+    liveSessionNames,
+    activeWindowHours,
+  });
+
+  const projectsWithStatus = file.projects.map(p => ({
+    ...p,
+    derivedStatus: byProjectId.get(p.id) ?? null,
+  }));
+
+  res.json({ projects: projectsWithStatus, anchor });
 });
 
 projectsRouter.get("/projects/:id", async (req, res) => {
