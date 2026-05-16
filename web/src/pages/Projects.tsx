@@ -1,24 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, X, Trash2, Check, RotateCcw, BrainCircuit, ChevronDown, ChevronRight } from "lucide-react";
-import { Pomodoro, Project, Task, TmuxResponse, PROJECT_PALETTE, apiRequest, getJSON } from "../api";
+import { Plus, X, Trash2, Check, RotateCcw, ChevronDown, ChevronRight } from "lucide-react";
+import { Pomodoro, Project, Task, PROJECT_PALETTE, apiRequest } from "../api";
+import type { DerivedStatus } from "../api";
 import { useProjects, NewProject, NewTask } from "../ProjectsContext";
 import { useSettings } from "../SettingsContext";
 import { ProjectChip } from "../components/ProjectChip";
 import { PomodoroDetailDrawer } from "../components/PomodoroDetailDrawer";
 import { formatDuration, computeProjectAbbreviation } from "../utils";
-
-type Status = "active" | "parked" | "completed";
-
-function statusOf(p: Project, assignmentsByTmux: Map<string, string>): Status {
-  if (p.completed_at) return "completed";
-  for (const pid of assignmentsByTmux.values()) if (pid === p.id) return "active";
-  return "parked";
-}
-
-function tmuxFor(p: Project, assignmentsByTmux: Map<string, string>): string | null {
-  for (const [k, v] of assignmentsByTmux.entries()) if (v === p.id) return k;
-  return null;
-}
 
 interface ProjectStats { todayMin: number; weekMin: number; allMin: number; }
 
@@ -64,29 +52,17 @@ function attributeMinutes(
 }
 
 export function Projects() {
-  const { projects, tasksByProject, taskById, assignmentsByTmux, loading, createProject } = useProjects();
+  const { projects, tasksByProject, taskById, assignmentsByTmux, derivedStatusByProjectId, projectsAnchor, loading, createProject } = useProjects();
   const [showCompleted, setShowCompleted] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pomodoros, setPomodoros] = useState<Pomodoro[]>([]);
-  const [tmuxClaude, setTmuxClaude] = useState<Map<string, boolean>>(new Map());
 
   useEffect(() => {
     apiRequest<{ pomodoros: Pomodoro[] }>("GET", "/api/pomodoros").then(r => {
       if (r.ok) setPomodoros((r.body as { pomodoros: Pomodoro[] }).pomodoros);
     });
-    getJSON<TmuxResponse>("/api/tmux").then(t => {
-      const m = new Map<string, boolean>();
-      if (t.source === "live") {
-        for (const s of t.tree) {
-          let hasClaude = false;
-          for (const w of s.windows) for (const p of w.panes) if (p.cmd === "claude") { hasClaude = true; break; }
-          m.set(s.name, hasClaude);
-        }
-      }
-      setTmuxClaude(m);
-    }).catch(() => {});
   }, []);
 
   const statsByProject = useMemo(() => {
@@ -128,17 +104,25 @@ export function Projects() {
     const completed: Project[] = [];
     for (const p of filtered) (p.completed_at ? completed : open).push(p);
     open.sort((a, b) => {
-      // Free always first; then active before parked; then alphabetical.
+      // Free always first.
       if (a.system && !b.system) return -1;
       if (!a.system && b.system) return 1;
-      const sa = statusOf(a, assignmentsByTmux);
-      const sb = statusOf(b, assignmentsByTmux);
-      if (sa !== sb) return sa === "active" ? -1 : 1;
+      const da = derivedStatusByProjectId.get(a.id);
+      const db = derivedStatusByProjectId.get(b.id);
+      // Active before parked.
+      const ea = da?.engagement ?? "parked";
+      const eb = db?.engagement ?? "parked";
+      if (ea !== eb) return ea === "active" ? -1 : 1;
+      // Within engagement: in_progress before not_started.
+      const pa = da?.progress ?? "not_started";
+      const pb = db?.progress ?? "not_started";
+      const progOrder = { in_progress: 0, not_started: 1, completed: 2 };
+      if (pa !== pb) return progOrder[pa] - progOrder[pb];
       return a.name.localeCompare(b.name);
     });
     completed.sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
     return { open, completed };
-  }, [filtered, assignmentsByTmux]);
+  }, [filtered, derivedStatusByProjectId]);
 
   const selected = selectedId ? projects.find(p => p.id === selectedId) ?? null : null;
 
@@ -166,6 +150,8 @@ export function Projects() {
         </label>
       </div>
 
+      <AnchorHeader anchor={projectsAnchor} />
+
       {loading && <div className="text-slate-500 text-sm">Loading…</div>}
 
       {!loading && grouped.open.length === 0 && grouped.completed.length === 0 && (
@@ -178,9 +164,8 @@ export function Projects() {
             key={p.id}
             project={p}
             tasks={tasksByProject.get(p.id) ?? []}
-            assignmentsByTmux={assignmentsByTmux}
+            derivedStatus={derivedStatusByProjectId.get(p.id) ?? null}
             stats={statsByProject.get(p.id) ?? emptyStats()}
-            tmuxClaude={tmuxClaude}
             minsByTask={minsByTask}
             onClick={() => setSelectedId(p.id)}
           />
@@ -196,9 +181,8 @@ export function Projects() {
                 key={p.id}
                 project={p}
                 tasks={tasksByProject.get(p.id) ?? []}
-                assignmentsByTmux={assignmentsByTmux}
+                derivedStatus={derivedStatusByProjectId.get(p.id) ?? null}
                 stats={statsByProject.get(p.id) ?? emptyStats()}
-                tmuxClaude={tmuxClaude}
                 minsByTask={minsByTask}
                 onClick={() => setSelectedId(p.id)}
               />
@@ -224,24 +208,24 @@ export function Projects() {
   );
 }
 
-function ProjectCard({ project, tasks, assignmentsByTmux, stats, tmuxClaude, minsByTask, onClick }: {
+function ProjectCard({ project, tasks, derivedStatus, stats, minsByTask, onClick }: {
   project: Project;
   tasks: Task[];
-  assignmentsByTmux: Map<string, string>;
+  derivedStatus: DerivedStatus | null;
   stats: ProjectStats;
-  tmuxClaude: Map<string, boolean>;
   minsByTask: Map<string, number>;
   onClick: () => void;
 }) {
   const { settings } = useSettings();
-  const status = statusOf(project, assignmentsByTmux);
-  const tmuxName = tmuxFor(project, assignmentsByTmux);
-  const hasClaude = tmuxName ? tmuxClaude.get(tmuxName) : undefined;
   const fmt = (m: number) => formatDuration(m, settings.workdayHours);
 
   const openTasks = tasks.filter(t => !t.completed_at);
   const doneTasks = tasks.filter(t => t.completed_at);
   const previewTasks = openTasks.slice(0, 5);
+
+  const progress = derivedStatus?.progress ?? "not_started";
+  const engagement = derivedStatus?.engagement ?? "parked";
+  const tmuxName = derivedStatus?.tmux_session_name ?? null;
 
   return (
     <button
@@ -249,14 +233,14 @@ function ProjectCard({ project, tasks, assignmentsByTmux, stats, tmuxClaude, min
       className="text-left border rounded bg-slate-900/40 hover:bg-slate-900/70 p-4 flex flex-col gap-2 border-slate-800"
       style={{ borderLeft: `5px solid ${project.color}` }}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <div className="font-semibold text-base">{project.name}</div>
         {project.system && <span className="text-[10px] text-slate-500 uppercase tracking-wider">system</span>}
-        <span className={`ml-auto text-xs px-1.5 py-0.5 rounded ${
-          status === "active" ? "bg-green-900/50 text-green-300" :
-          status === "parked" ? "bg-slate-800 text-slate-400" :
-                                "bg-slate-800 text-slate-500"
-        }`}>{status}</span>
+        <div className="ml-auto flex items-center gap-1">
+          <ProgressChip progress={progress} />
+          <EngagementChip engagement={engagement} />
+          {tmuxName && <TmuxChip name={tmuxName} />}
+        </div>
       </div>
       {project.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -265,23 +249,9 @@ function ProjectCard({ project, tasks, assignmentsByTmux, stats, tmuxClaude, min
           ))}
         </div>
       )}
-      <div className="text-xs text-slate-500 flex items-center gap-2">
-        {status === "active" && (
-          <>
-            <span>active in <span className="font-mono text-slate-400">{tmuxName}</span></span>
-            {hasClaude === true && (
-              <span className="inline-flex items-center text-cyan-300" title="Claude is running in this tmux">
-                <BrainCircuit size={12} />
-              </span>
-            )}
-            {hasClaude === false && (
-              <span className="text-slate-600" title="Tmux session is alive but no Claude pane">○</span>
-            )}
-          </>
-        )}
-        {status === "parked" && "no tmux assigned"}
-        {status === "completed" && project.completed_at && <>completed {new Date(project.completed_at).toLocaleDateString()}</>}
-      </div>
+      {progress === "completed" && project.completed_at && (
+        <div className="text-xs text-slate-500">completed {new Date(project.completed_at).toLocaleDateString()}</div>
+      )}
       <div className="text-sm text-slate-400 grid grid-cols-3 gap-1 pt-2 border-t border-slate-800">
         <div><span className="text-slate-500">Today </span>{fmt(stats.todayMin)}</div>
         <div><span className="text-slate-500">Week </span>{fmt(stats.weekMin)}</div>
@@ -413,7 +383,7 @@ function CreateProjectModal({ onClose, onCreate }: {
 }
 
 function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => void }) {
-  const { tasksByProject, taskById, updateProject, deleteProject, setAssignment, createTask, updateTask, deleteTask } = useProjects();
+  const { tasksByProject, taskById, updateProject, deleteProject, setAssignment, assignmentsByTmux, derivedStatusByProjectId, createTask, updateTask, deleteTask } = useProjects();
   const { settings } = useSettings();
   const [name, setName] = useState(project.name);
   const [color, setColor] = useState(project.color);
@@ -437,8 +407,13 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
   const [showDone, setShowDone] = useState(false);
   const [newTaskName, setNewTaskName] = useState("");
 
-  const status = statusOf(project, useProjects().assignmentsByTmux);
-  const tmuxName = tmuxFor(project, useProjects().assignmentsByTmux);
+  const derivedStatus = derivedStatusByProjectId.get(project.id) ?? null;
+  // tmuxName for the assignment section: look up from assignmentsByTmux directly
+  // (shows any assigned session, whether live or not)
+  const tmuxName = (() => {
+    for (const [k, v] of assignmentsByTmux.entries()) if (v === project.id) return k;
+    return null;
+  })();
 
   useEffect(() => {
     apiRequest<{ pomodoros: Pomodoro[] }>("GET", `/api/pomodoros?projectId=${encodeURIComponent(project.id)}`).then(r => {
@@ -575,7 +550,10 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <ProjectChip project={project} />
-            <span className="text-xs text-slate-400">{status}</span>
+            <div className="flex items-center gap-1">
+              <ProgressChip progress={derivedStatus?.progress ?? "not_started"} />
+              <EngagementChip engagement={derivedStatus?.engagement ?? "parked"} />
+            </div>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
         </div>
@@ -881,5 +859,47 @@ function ProjectRecentPomodoros({ pomodoros, workdayHours, onPick }: {
         })}
       </div>
     </div>
+  );
+}
+
+function AnchorHeader({ anchor }: { anchor: { ts: string | null; activeWindowHours: number } }) {
+  if (anchor.ts === null) {
+    return (
+      <div className="text-xs text-slate-500 bg-slate-900/60 border border-slate-800 rounded px-3 py-1.5">
+        No pomodoros yet — all projects are parked.
+      </div>
+    );
+  }
+  const d = new Date(anchor.ts);
+  const fmt = d.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
+  return (
+    <div className="text-xs text-slate-500 bg-slate-900/60 border border-slate-800 rounded px-3 py-1.5">
+      Active window: <span className="text-slate-300">{anchor.activeWindowHours}h</span>{" "}
+      since last pomodoro at <span className="text-slate-300">{fmt}</span>.
+    </div>
+  );
+}
+
+function ProgressChip({ progress }: { progress: "not_started" | "in_progress" | "completed" }) {
+  const styles = {
+    not_started: { bg: "bg-slate-800", text: "text-slate-400", label: "not started" },
+    in_progress: { bg: "bg-blue-900/50", text: "text-blue-300", label: "in progress" },
+    completed:   { bg: "bg-green-900/50", text: "text-green-300", label: "✓ completed" },
+  }[progress];
+  return <span className={`text-[10px] px-1.5 py-0.5 rounded ${styles.bg} ${styles.text}`}>{styles.label}</span>;
+}
+
+function EngagementChip({ engagement }: { engagement: "active" | "parked" }) {
+  const styles = engagement === "active"
+    ? { bg: "bg-amber-900/50", text: "text-amber-300" }
+    : { bg: "bg-slate-800",    text: "text-slate-500" };
+  return <span className={`text-[10px] px-1.5 py-0.5 rounded ${styles.bg} ${styles.text}`}>{engagement}</span>;
+}
+
+function TmuxChip({ name }: { name: string }) {
+  return (
+    <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-900/40 text-cyan-300 font-mono" title={`tmux session: ${name}`}>
+      ⌗ {name}
+    </span>
   );
 }
