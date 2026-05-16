@@ -20,6 +20,7 @@ export function SettingsModal({ open, onClose }: Props) {
   const [endBeepSound, setEndBeepSound] = useState<BeepSound>(settings.endBeepSound);
   const [audioEnabled, setAudioEnabled] = useState(settings.audioEnabled);
   const [notificationsEnabled, setNotificationsEnabled] = useState(settings.notificationsEnabled);
+  const [activeWindowHours, setActiveWindowHours] = useState(settings.activeWindowHours);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -32,6 +33,7 @@ export function SettingsModal({ open, onClose }: Props) {
       setEndBeepSound(settings.endBeepSound);
       setAudioEnabled(settings.audioEnabled);
       setNotificationsEnabled(settings.notificationsEnabled);
+      setActiveWindowHours(settings.activeWindowHours);
       setError(null);
     }
   }, [open, settings]);
@@ -50,6 +52,7 @@ export function SettingsModal({ open, onClose }: Props) {
         endBeepSound,
         audioEnabled,
         notificationsEnabled,
+        activeWindowHours,
       });
       onClose();
     } catch (e: any) {
@@ -93,6 +96,14 @@ export function SettingsModal({ open, onClose }: Props) {
             <input
               type="number" min={1} max={60} value={restMinutes}
               onChange={e => setRestMinutes(Number(e.target.value))}
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm text-slate-300">Active window (h) — project marked active if a pomodoro occurred within this many hours of the most recent one</span>
+            <input
+              type="number" min={1} max={8760} step={1} value={activeWindowHours}
+              onChange={e => setActiveWindowHours(Number(e.target.value))}
               className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
             />
           </label>
