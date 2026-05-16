@@ -63,6 +63,11 @@ export interface SessionMeta {
   lastTmuxLocation: { tmuxSession: string; windowIndex: number; paneIndex: number; ts: string } | null;
 }
 
+export interface SessionsResponse {
+  sessions: SessionMeta[];
+  anchor: string | null;  // ISO; null when hours=0 or no sessions
+}
+
 export interface TmuxPane {
   index: number;
   paneId: string;
@@ -105,6 +110,31 @@ export interface Project {
   system?: boolean;
 }
 
+export type Progress = "not_started" | "in_progress" | "completed";
+export type Engagement = "active" | "parked";
+
+export interface DerivedStatus {
+  progress: Progress;
+  engagement: Engagement;
+  tmux_attached: boolean;
+  tmux_session_name: string | null;
+  last_pomodoro_at: string | null;
+}
+
+export interface ProjectWithStatus extends Project {
+  derivedStatus: DerivedStatus | null;
+}
+
+export interface ProjectStatusAnchor {
+  ts: string | null;
+  activeWindowHours: number;
+}
+
+export interface ProjectsResponse {
+  projects: ProjectWithStatus[];
+  anchor: ProjectStatusAnchor;
+}
+
 export interface Task {
   id: string;
   project_id: string;
@@ -128,6 +158,7 @@ export interface Settings {
   endBeepSound: BeepSound;
   audioEnabled: boolean;
   notificationsEnabled: boolean;
+  activeWindowHours: number;
 }
 
 export interface Pomodoro {
