@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from "react";
-import { apiRequest, Project, Task } from "./api";
+import {
+  apiRequest, Project, Task, DerivedStatus, ProjectStatusAnchor, ProjectsResponse, ProjectWithStatus,
+} from "./api";
 
 export interface NewProject {
   name: string;
@@ -19,6 +21,8 @@ export interface NewTask {
 interface Ctx {
   projects: Project[];
   projectById: Map<string, Project>;
+  derivedStatusByProjectId: Map<string, DerivedStatus>;
+  projectsAnchor: ProjectStatusAnchor;
   tasks: Task[];
   tasksByProject: Map<string, Task[]>;
   taskById: Map<string, Task>;
@@ -37,18 +41,23 @@ interface Ctx {
 const ProjectsContext = createContext<Ctx | null>(null);
 
 export function ProjectsProvider({ children }: { children: ReactNode }) {
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<ProjectWithStatus[]>([]);
+  const [anchor, setAnchor] = useState<ProjectStatusAnchor>({ ts: null, activeWindowHours: 72 });
   const [tasks, setTasks] = useState<Task[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     const [pr, tr, ar] = await Promise.all([
-      apiRequest<{ projects: Project[] }>("GET", "/api/projects"),
+      apiRequest<ProjectsResponse>("GET", "/api/projects"),
       apiRequest<{ tasks: Task[] }>("GET", "/api/tasks"),
       apiRequest<{ assignments: Record<string, string> }>("GET", "/api/assignments"),
     ]);
-    if (pr.ok) setProjects((pr.body as { projects: Project[] }).projects);
+    if (pr.ok) {
+      const body = pr.body as ProjectsResponse;
+      setProjects(body.projects);
+      setAnchor(body.anchor);
+    }
     if (tr.ok) setTasks((tr.body as { tasks: Task[] }).tasks);
     if (ar.ok) setAssignments((ar.body as { assignments: Record<string, string> }).assignments);
     setLoading(false);
@@ -131,9 +140,19 @@ export function ProjectsProvider({ children }: { children: ReactNode }) {
     return m;
   }, [assignments]);
 
+  const derivedStatusByProjectId = useMemo(() => {
+    const m = new Map<string, DerivedStatus>();
+    for (const p of projects) {
+      if (p.derivedStatus) m.set(p.id, p.derivedStatus);
+    }
+    return m;
+  }, [projects]);
+
   return (
     <ProjectsContext.Provider value={{
       projects, projectById,
+      derivedStatusByProjectId,
+      projectsAnchor: anchor,
       tasks, tasksByProject, taskById,
       assignmentsByTmux,
       loading, refresh,
