@@ -14,14 +14,32 @@ import { fmtMmSs, loadActive, loadRest } from "./lib/liveTimer";
 
 type Tab = "sessions" | "tmux" | "shell" | "snapshots" | "projects" | "pomodoro" | "calendar";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "sessions", label: "Sessions" },
-  { id: "tmux", label: "Tmux Map" },
-  { id: "shell", label: "Shell History" },
-  { id: "snapshots", label: "Snapshots" },
-  { id: "projects", label: "Projects" },
-  { id: "pomodoro", label: "Pomodoro" },
-  { id: "calendar", label: "Calendar" },
+type Group = { label: string; tabs: { id: Tab; label: string }[]; demoted?: boolean };
+
+const NAV_GROUPS: Group[] = [
+  {
+    label: "WORK",
+    tabs: [
+      { id: "projects",  label: "Projects" },
+      { id: "pomodoro",  label: "Pomodoro" },
+      { id: "calendar",  label: "Calendar" },
+    ],
+  },
+  {
+    label: "ENVIRONMENT",
+    tabs: [
+      { id: "sessions",  label: "Sessions" },
+      { id: "tmux",      label: "Tmux Map" },
+    ],
+  },
+  {
+    label: "TOOLS",
+    demoted: true,
+    tabs: [
+      { id: "snapshots", label: "Snapshots" },
+      { id: "shell",     label: "Shell History" },
+    ],
+  },
 ];
 
 // Compute the dynamic suffix for the Pomodoro tab (Work / Break / Done countdown).
@@ -63,38 +81,37 @@ export function App() {
 }
 
 function AppInner() {
-  const [tab, setTab] = useState<Tab>("sessions");
+  const [tab, setTab] = useState<Tab>("pomodoro");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const pomodoroLabel = usePomodoroTabLabel();
   return (
     <div className="flex flex-col h-full">
-      <header className="flex items-center gap-6 px-6 py-3 border-b border-slate-800 bg-slate-900">
-        <h1 className="font-serif text-2xl tracking-tight text-white">
-          ΣΠ <span className="text-slate-500">∪</span> ΠΣ
-        </h1>
-        <nav className="flex gap-1">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-3 py-1.5 rounded text-sm ${
-                tab === t.id
-                  ? "bg-slate-700 text-white"
-                  : "text-slate-400 hover:text-white hover:bg-slate-800"
-              }`}
-            >
-              {t.id === "pomodoro" ? pomodoroLabel : t.label}
-            </button>
+      <header className="flex flex-col border-b border-slate-800 bg-slate-900">
+        <div className="flex items-center gap-6 px-6 pt-3 pb-2">
+          <h1 className="font-serif text-2xl tracking-tight text-white">
+            ΣΠ <span className="text-slate-500">∪</span> ΠΣ
+          </h1>
+          <div className="flex-1" />
+          <button
+            onClick={() => setSettingsOpen(true)}
+            title="Settings"
+            className="text-slate-400 hover:text-white p-1.5 rounded hover:bg-slate-800"
+          >
+            <SettingsIcon size={18} />
+          </button>
+        </div>
+        <nav className="flex items-end px-6 pb-2 gap-4">
+          {NAV_GROUPS.map((g, i) => (
+            <NavGroup
+              key={g.label}
+              group={g}
+              activeTab={tab}
+              onSelect={setTab}
+              pomodoroLabel={pomodoroLabel}
+              showDividerBefore={i > 0}
+            />
           ))}
         </nav>
-        <div className="flex-1" />
-        <button
-          onClick={() => setSettingsOpen(true)}
-          title="Settings"
-          className="text-slate-400 hover:text-white p-1.5 rounded hover:bg-slate-800"
-        >
-          <SettingsIcon size={18} />
-        </button>
       </header>
       <main className="flex-1 overflow-auto p-6">
         {tab === "sessions" && <Sessions />}
@@ -106,6 +123,53 @@ function AppInner() {
         {tab === "calendar" && <Calendar />}
       </main>
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </div>
+  );
+}
+
+function NavGroup({
+  group,
+  activeTab,
+  onSelect,
+  pomodoroLabel,
+  showDividerBefore,
+}: {
+  group: Group;
+  activeTab: Tab;
+  onSelect: (t: Tab) => void;
+  pomodoroLabel: string;
+  showDividerBefore: boolean;
+}) {
+  const demoted = !!group.demoted;
+  const labelClass = "text-[10px] uppercase tracking-wider text-slate-500 mb-0.5";
+  const tabBase = demoted
+    ? "px-2 py-1 rounded text-xs"
+    : "px-3 py-1.5 rounded text-sm";
+  const tabIdle = demoted
+    ? "text-slate-600 hover:text-white hover:bg-slate-800"
+    : "text-slate-400 hover:text-white hover:bg-slate-800";
+  const tabActive = "bg-slate-700 text-white";
+
+  return (
+    <div
+      className={[
+        "flex flex-col",
+        showDividerBefore ? "border-l border-slate-800 pl-4" : "",
+        demoted ? "ml-auto" : "",
+      ].filter(Boolean).join(" ")}
+    >
+      <div className={labelClass}>{group.label}</div>
+      <div className="flex gap-1 flex-wrap">
+        {group.tabs.map(t => (
+          <button
+            key={t.id}
+            onClick={() => onSelect(t.id)}
+            className={`${tabBase} ${activeTab === t.id ? tabActive : tabIdle}`}
+          >
+            {t.id === "pomodoro" ? pomodoroLabel : t.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
