@@ -67,12 +67,12 @@ export function PomodoroPage() {
   const [postFlow, setPostFlow] = useState<
     | null
     | { stage: "notes"; pomodoro: Pomodoro }
-    | { stage: "rest"; proposal: NextPomodoroProposal; restEndsAt: number }
+    | { stage: "rest"; proposal: NextPomodoroProposal; restEndsAt: number; pausedAt: number | null }
     | { stage: "restart-prompt"; proposal: NextPomodoroProposal }
   >(() => {
     // Restore rest state from localStorage if present.
     const r = loadRest();
-    if (r) return { stage: "rest", proposal: r.proposal, restEndsAt: r.restEndsAt };
+    if (r) return { stage: "rest", proposal: r.proposal, restEndsAt: r.restEndsAt, pausedAt: r.pausedAt ?? null };
     return null;
   });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -188,6 +188,7 @@ export function PomodoroPage() {
       firedRestEndRef.current = null;
       return;
     }
+    if (postFlow.pausedAt) return;        // don't auto-end a paused rest
     if (now < postFlow.restEndsAt) return;
     if (firedRestEndRef.current === postFlow.restEndsAt) return;
     firedRestEndRef.current = postFlow.restEndsAt;
@@ -311,7 +312,9 @@ export function PomodoroPage() {
   const totalPages = Math.max(1, Math.ceil(pomodoros.length / PAGE_SIZE));
   const pageItems = pomodoros.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
-  const restRemainingMs = postFlow?.stage === "rest" ? Math.max(0, postFlow.restEndsAt - now) : 0;
+  const restIsPaused = postFlow?.stage === "rest" && !!postFlow.pausedAt;
+  const restReferenceMs = postFlow?.stage === "rest" ? (postFlow.pausedAt ?? now) : now;
+  const restRemainingMs = postFlow?.stage === "rest" ? Math.max(0, postFlow.restEndsAt - restReferenceMs) : 0;
 
   function cancelRest() {
     if (postFlow?.stage !== "rest") return;
@@ -329,6 +332,21 @@ export function PomodoroPage() {
     setPostFlow({ stage: "restart-prompt", proposal: postFlow.proposal });
   }
 
+  function pauseRest() {
+    if (postFlow?.stage !== "rest" || postFlow.pausedAt) return;
+    const pausedAt = Date.now();
+    saveRest({ restEndsAt: postFlow.restEndsAt, proposal: postFlow.proposal, pausedAt });
+    setPostFlow({ ...postFlow, pausedAt });
+  }
+
+  function resumeRest() {
+    if (postFlow?.stage !== "rest" || !postFlow.pausedAt) return;
+    const additional = Date.now() - postFlow.pausedAt;
+    const newEndsAt = postFlow.restEndsAt + additional;
+    saveRest({ restEndsAt: newEndsAt, proposal: postFlow.proposal, pausedAt: null });
+    setPostFlow({ ...postFlow, restEndsAt: newEndsAt, pausedAt: null });
+  }
+
   return (
     <div className="space-y-6">
       {/* Live timer / rest block (single source of truth on the page) */}
@@ -341,8 +359,20 @@ export function PomodoroPage() {
               <div className="font-mono text-3xl tabular-nums text-amber-200">
                 {fmtMmSs(restRemainingMs)}
               </div>
-              <div className="text-xs text-amber-300/80">resting · of {settings.restMinutes} min</div>
+              <div className="text-xs text-amber-300/80 flex items-center gap-2">
+                <span>resting · of {settings.restMinutes} min</span>
+                {restIsPaused && <span className="text-amber-200">⏸ paused</span>}
+              </div>
               <div className="flex-1" />
+              {restIsPaused ? (
+                <button onClick={resumeRest} className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-700 hover:bg-green-600 rounded text-sm text-white">
+                  <Play size={14} /> Resume
+                </button>
+              ) : (
+                <button onClick={pauseRest} className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded text-sm text-white">
+                  <Pause size={14} /> Pause
+                </button>
+              )}
               <button onClick={skipRest}
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white">Skip rest</button>
               <button onClick={cancelRest}
@@ -645,8 +675,8 @@ export function PomodoroPage() {
             };
             const restMin = Number.isFinite(settings.restMinutes) && settings.restMinutes > 0 ? settings.restMinutes : 5;
             const restEndsAt = Date.now() + restMin * 60_000;
-            saveRest({ restEndsAt, proposal });
-            setPostFlow({ stage: "rest", proposal, restEndsAt });
+            saveRest({ restEndsAt, proposal, pausedAt: null });
+            setPostFlow({ stage: "rest", proposal, restEndsAt, pausedAt: null });
             setNow(Date.now());
           }}
           onContinueNow={async (notes) => {
