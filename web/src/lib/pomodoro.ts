@@ -8,6 +8,6 @@ import type { Pomodoro } from "../api";
  */
 export function pomodoroMinutes(p: Pomodoro): number {
   const elapsed = Date.parse(p.ended_at) - Date.parse(p.started_at);
-  const paused  = (p as any).paused_ms ?? 0;
+  const paused  = p.paused_ms ?? 0;
   return Math.max(0, (elapsed - paused) / 60000);
 }

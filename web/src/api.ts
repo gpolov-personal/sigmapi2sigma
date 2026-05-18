@@ -172,6 +172,8 @@ export interface Pomodoro {
   /** Per-pomodoro task label for the Free project. Empty when Free isn't picked
    *  or the user didn't type a label. Renders as "Free › <label>" in chips. */
   freeTaskLabel: string;
+  /** Total ms paused during this pomodoro. 0 for legacy records and never-paused sessions. */
+  paused_ms: number;
   source: "live-timer" | "manual";
   context: {
     tmux_session_names: string[];
