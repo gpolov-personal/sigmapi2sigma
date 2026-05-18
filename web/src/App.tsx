@@ -50,15 +50,22 @@ function usePomodoroTabLabel(): string {
     const tick = () => {
       const rest = loadRest();
       if (rest) {
-        const remaining = rest.restEndsAt - Date.now();
-        if (remaining > 0) { setLabel(`Pomodoro · Break ${fmtMmSs(remaining)}`); return; }
+        const isPaused = !!rest.pausedAt;
+        const reference = rest.pausedAt ?? Date.now();
+        const remaining = rest.restEndsAt - reference;
+        const prefix = isPaused ? "Pomodoro · ⏸ Break" : "Pomodoro · Break";
+        if (remaining > 0) { setLabel(`${prefix} ${fmtMmSs(remaining)}`); return; }
         setLabel("Pomodoro · Break done"); return;
       }
       const active = loadActive();
       if (active) {
-        const targetMs = active.targetDurationMinutes * 60_000;
-        const remaining = targetMs - (Date.now() - active.startedAt);
-        if (remaining > 0) { setLabel(`Pomodoro · Work ${fmtMmSs(remaining)}`); return; }
+        const isPaused = !!active.pausedAt;
+        const accumulatedPausedMs = active.accumulatedPausedMs ?? 0;
+        const reference = active.pausedAt ?? Date.now();
+        const targetAt = active.startedAt + accumulatedPausedMs + active.targetDurationMinutes * 60_000;
+        const remaining = targetAt - reference;
+        const prefix = isPaused ? "Pomodoro · ⏸ Work" : "Pomodoro · Work";
+        if (remaining > 0) { setLabel(`${prefix} ${fmtMmSs(remaining)}`); return; }
         setLabel("Pomodoro · Done"); return;
       }
       setLabel("Pomodoro");
