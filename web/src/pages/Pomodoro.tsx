@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, X, AlarmClock, Coffee, Play } from "lucide-react";
+import { Plus, X, AlarmClock, Coffee, Play, Pause } from "lucide-react";
 import { Pomodoro, Project, Task, apiRequest, FREE_PROJECT_ID } from "../api";
 import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
@@ -97,9 +97,17 @@ export function PomodoroPage() {
     if (!active) setDuration(settings.defaultPomodoroDuration);
   }, [settings.defaultPomodoroDuration, active]);
 
-  const targetMs = active ? active.startedAt + active.targetDurationMinutes * 60_000 : 0;
-  const remainingMs = active ? targetMs - now : 0;
-  const elapsedMs = active ? now - active.startedAt : 0;
+  // When paused, "reference time" is frozen at pausedAt — so elapsed and remaining stop ticking.
+  // When running, reference is `now`. accumulatedPausedMs is always subtracted from elapsed
+  // and added to the target so a 25-min pomodoro means 25 mins of work, not wall-clock.
+  const isPaused = !!(active && active.pausedAt);
+  const accumulatedPausedMs = active?.accumulatedPausedMs ?? 0;
+  const referenceMs = active ? (active.pausedAt ?? now) : now;
+  const targetMs = active
+    ? active.startedAt + accumulatedPausedMs + active.targetDurationMinutes * 60_000
+    : 0;
+  const remainingMs = active ? targetMs - referenceMs : 0;
+  const elapsedMs = active ? referenceMs - active.startedAt - accumulatedPausedMs : 0;
 
   const startTimerFromProposal = useCallback(async (proposal: NextPomodoroProposal, freeLabel?: string) => {
     if (settings.notificationsEnabled) ensureNotificationPermission();
@@ -126,6 +134,9 @@ export function PomodoroPage() {
   const finalizePomodoro = useCallback(async (state: LiveTimerState, endedAtMs: number) => {
     const startedAt = new Date(state.startedAt).toISOString();
     const endedAt = new Date(endedAtMs).toISOString();
+    const accumulatedPausedMs = state.accumulatedPausedMs ?? 0;
+    const inProgressPausedMs = state.pausedAt ? Math.max(0, endedAtMs - state.pausedAt) : 0;
+    const paused_ms = accumulatedPausedMs + inProgressPausedMs;
     const r = await apiRequest<Pomodoro>("POST", "/api/pomodoros", {
       started_at: startedAt,
       ended_at: endedAt,
@@ -134,6 +145,7 @@ export function PomodoroPage() {
       task_ids: state.taskIds ?? [],
       notes: "",
       freeTaskLabel: state.freeTaskLabel ?? "",
+      paused_ms,
       source: "live-timer",
     });
     clearActive();
@@ -155,6 +167,7 @@ export function PomodoroPage() {
       firedAutoStopRef.current = null;
       return;
     }
+    if (active.pausedAt) return;  // can't auto-stop while paused
     if (now < targetMs) return;
     if (firedAutoStopRef.current === active.startedAt) return;
     firedAutoStopRef.current = active.startedAt;
@@ -232,6 +245,25 @@ export function PomodoroPage() {
   function keepGoing() {
     if (!active) return;
     const next: LiveTimerState = { ...active, targetDurationMinutes: active.targetDurationMinutes + settings.defaultPomodoroDuration };
+    saveActive(next);
+    setActive(next);
+  }
+
+  function pauseTimer() {
+    if (!active || active.pausedAt) return;
+    const next: LiveTimerState = { ...active, pausedAt: Date.now() };
+    saveActive(next);
+    setActive(next);
+  }
+
+  function resumeTimer() {
+    if (!active || !active.pausedAt) return;
+    const additional = Date.now() - active.pausedAt;
+    const next: LiveTimerState = {
+      ...active,
+      pausedAt: null,
+      accumulatedPausedMs: (active.accumulatedPausedMs ?? 0) + additional,
+    };
     saveActive(next);
     setActive(next);
   }
@@ -351,7 +383,10 @@ export function PomodoroPage() {
                 />
               )}
               {active && (
-                <div className="text-xs text-slate-400">elapsed {fmtMmSs(elapsedMs)} / target {active.targetDurationMinutes}m</div>
+                <div className="text-xs text-slate-400 flex items-center gap-2">
+                  <span>elapsed {fmtMmSs(elapsedMs)} / target {active.targetDurationMinutes}m</span>
+                  {isPaused && <span className="text-amber-300">⏸ paused</span>}
+                </div>
               )}
               <div className="flex-1" />
               {!active ? (
@@ -359,7 +394,16 @@ export function PomodoroPage() {
                   className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white disabled:opacity-50">Start</button>
               ) : (
                 <>
-                  <button onClick={keepGoing} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm">Keep going (+{settings.defaultPomodoroDuration}m)</button>
+                  <button onClick={keepGoing} disabled={isPaused} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm disabled:opacity-40">Keep going (+{settings.defaultPomodoroDuration}m)</button>
+                  {isPaused ? (
+                    <button onClick={resumeTimer} className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-700 hover:bg-green-600 rounded text-sm text-white">
+                      <Play size={14} /> Resume
+                    </button>
+                  ) : (
+                    <button onClick={pauseTimer} className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded text-sm text-white">
+                      <Pause size={14} /> Pause
+                    </button>
+                  )}
                   <button onClick={stopTimer} className="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded text-sm text-white">Stop</button>
                   <button onClick={discardActive} title="Discard without saving" className="px-2 py-1.5 text-xs text-slate-500 hover:text-white">discard</button>
                 </>
