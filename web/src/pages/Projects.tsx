@@ -7,14 +7,11 @@ import { useSettings } from "../SettingsContext";
 import { ProjectChip } from "../components/ProjectChip";
 import { PomodoroDetailDrawer } from "../components/PomodoroDetailDrawer";
 import { formatDuration, computeProjectAbbreviation } from "../utils";
+import { pomodoroMinutes } from "../lib/pomodoro";
 
 interface ProjectStats { todayMin: number; weekMin: number; allMin: number; }
 
 function emptyStats(): ProjectStats { return { todayMin: 0, weekMin: 0, allMin: 0 }; }
-
-function pomDur(p: Pomodoro): number {
-  return Math.max(0, (Date.parse(p.ended_at) - Date.parse(p.started_at)) / 60000);
-}
 
 // Time attribution per pomodoro (matches backend formula):
 // units = each picked task + each picked project that has no task picked under it.
@@ -23,7 +20,7 @@ function attributeMinutes(
   p: Pomodoro,
   taskById: Map<string, Task>
 ): { byProject: Map<string, number>; byTask: Map<string, number> } {
-  const dur = pomDur(p);
+  const dur = pomodoroMinutes(p);
   const tasksByProj = new Map<string, string[]>();
   for (const tid of p.task_ids) {
     const t = taskById.get(tid);
@@ -847,7 +844,7 @@ function ProjectRecentPomodoros({ pomodoros, workdayHours, onPick }: {
       <div className="text-sm text-slate-300 mb-2">Recent pomodoros (last 10)</div>
       <div className="space-y-1">
         {recent.map(p => {
-          const min = (Date.parse(p.ended_at) - Date.parse(p.started_at)) / 60000;
+          const min = pomodoroMinutes(p);
           return (
             <button key={p.id} onClick={() => onPick(p.id)}
               className="w-full text-left text-xs hover:bg-slate-800/50 rounded px-2 py-1 flex items-center gap-2"

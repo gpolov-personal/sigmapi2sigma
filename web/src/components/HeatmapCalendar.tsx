@@ -5,6 +5,7 @@ import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
 import { Task } from "../api";
 import { formatDuration } from "../utils";
+import { pomodoroMinutes } from "../lib/pomodoro";
 
 interface DayCell {
   date: Date;       // local midnight
@@ -20,7 +21,7 @@ interface Props {
 
 // Same attribution formula used elsewhere.
 function attributeProjectMins(p: Pomodoro, taskById: Map<string, Task>): Map<string, number> {
-  const dur = Math.max(0, (Date.parse(p.ended_at) - Date.parse(p.started_at)) / 60000);
+  const dur = pomodoroMinutes(p);
   const tasksByProj = new Map<string, string[]>();
   for (const tid of p.task_ids) {
     const t = taskById.get(tid);

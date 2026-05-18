@@ -6,6 +6,7 @@ import { useProjects } from "../ProjectsContext";
 import { ProjectChip } from "./ProjectChip";
 import { PomodoroDetailDrawer } from "./PomodoroDetailDrawer";
 import { formatDuration } from "../utils";
+import { pomodoroMinutes } from "../lib/pomodoro";
 
 interface Props {
   date: Date;                 // any moment in the target day; we use local-day boundaries
@@ -18,10 +19,6 @@ function isSameLocalDay(ts: number, d: Date): boolean {
   return a.getFullYear() === d.getFullYear() && a.getMonth() === d.getMonth() && a.getDate() === d.getDate();
 }
 
-function pomDurMin(p: Pomodoro): number {
-  return Math.max(0, (Date.parse(p.ended_at) - Date.parse(p.started_at)) / 60000);
-}
-
 export function DayDrawer({ date, pomodoros, onClose }: Props) {
   const { settings } = useSettings();
   const { projectById, taskById } = useProjects();
@@ -31,7 +28,7 @@ export function DayDrawer({ date, pomodoros, onClose }: Props) {
     .filter(p => isSameLocalDay(Date.parse(p.started_at), date))
     .sort((a, b) => a.started_at.localeCompare(b.started_at));
 
-  const totalMin = dayPoms.reduce((s, p) => s + pomDurMin(p), 0);
+  const totalMin = dayPoms.reduce((s, p) => s + pomodoroMinutes(p), 0);
 
   return (
     <div className="fixed inset-0 z-40 flex">
@@ -54,7 +51,7 @@ export function DayDrawer({ date, pomodoros, onClose }: Props) {
         ) : (
           <div className="space-y-2">
             {dayPoms.map(p => {
-              const min = pomDurMin(p);
+              const min = pomodoroMinutes(p);
               const start = new Date(p.started_at);
               const end = new Date(p.ended_at);
               const fmt = (d: Date) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });

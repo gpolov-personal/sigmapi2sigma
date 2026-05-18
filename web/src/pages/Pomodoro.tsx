@@ -10,14 +10,11 @@ import {
   LiveTimerState, LiveRestState, clearActive, clearRest, ensureNotificationPermission,
   fmtMmSs, loadActive, loadRest, notify, playBeep, saveActive, saveRest,
 } from "../lib/liveTimer";
+import { pomodoroMinutes } from "../lib/pomodoro";
 
 const PAGE_SIZE = 50;
 
 function startOfDay(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
-
-function pomDurMin(p: Pomodoro): number {
-  return Math.max(0, (Date.parse(p.ended_at) - Date.parse(p.started_at)) / 60000);
-}
 
 interface NextPomodoroProposal {
   projectIds: string[];
@@ -31,7 +28,7 @@ function attribute(
   p: Pomodoro,
   taskById: Map<string, Task>
 ): { byProject: Map<string, number>; byTask: Map<string, number> } {
-  const dur = pomDurMin(p);
+  const dur = pomodoroMinutes(p);
   const tasksByProj = new Map<string, string[]>();
   for (const tid of p.task_ids) {
     const t = taskById.get(tid);
@@ -248,7 +245,7 @@ export function PomodoroPage() {
     const t = Date.parse(p.started_at);
     return t >= today && t < tomorrow;
   });
-  const todayMinutes = todayPoms.reduce((s, p) => s + pomDurMin(p), 0);
+  const todayMinutes = todayPoms.reduce((s, p) => s + pomodoroMinutes(p), 0);
   const byProject = useMemo(() => {
     const m = new Map<string, number>();
     for (const p of todayPoms) {
@@ -556,7 +553,7 @@ export function PomodoroPage() {
                 <tr><td colSpan={4} className="px-3 py-6 text-center text-slate-500">No pomodoros yet.</td></tr>
               )}
               {pageItems.map(p => {
-                const min = pomDurMin(p);
+                const min = pomodoroMinutes(p);
                 return (
                   <tr key={p.id} onClick={() => setSelectedId(p.id)}
                       className="border-t border-slate-800 hover:bg-slate-900/60 cursor-pointer align-top">

@@ -4,12 +4,10 @@ import { ActivitySlice, Pomodoro, apiRequest, FREE_PROJECT_ID } from "../api";
 import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
 import { formatDuration } from "../utils";
+import { pomodoroMinutes } from "../lib/pomodoro";
 
 interface Props { pomodoroId: string; onClose: () => void; }
 
-function durMin(p: Pomodoro): number {
-  return Math.max(0, (Date.parse(p.ended_at) - Date.parse(p.started_at)) / 60000);
-}
 
 export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
   const { projectById, taskById } = useProjects();
@@ -67,7 +65,7 @@ export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
     );
   }
 
-  const minutes = durMin(pomodoro);
+  const minutes = pomodoroMinutes(pomodoro);
   const start = new Date(pomodoro.started_at);
   const end = new Date(pomodoro.ended_at);
   const fmt = (d: Date) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
