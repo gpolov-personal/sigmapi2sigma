@@ -29,6 +29,8 @@ export interface Pomodoro {
     tmux_session_names: string[];
     claude_session_ids: string[];
   };
+  /** Total milliseconds the pomodoro was paused. 0 for legacy records and never-paused sessions. */
+  paused_ms: number;
 }
 
 interface PomFile { schemaVersion: number; pomodoros: Pomodoro[] }
@@ -69,11 +71,17 @@ async function captureContext(
   return { tmux_session_names, claude_session_ids: [...sids] };
 }
 
-// Backfill missing freeTaskLabel for old records. Pure read-time normalization;
+// Backfill missing fields for old records. Pure read-time normalization;
 // not persisted unless the record is otherwise updated.
 function normalize(p: Pomodoro): Pomodoro {
-  if (typeof p.freeTaskLabel !== "string") return { ...p, freeTaskLabel: "" };
-  return p;
+  const patched: any = { ...p };
+  let changed = false;
+  if (typeof patched.freeTaskLabel !== "string") { patched.freeTaskLabel = ""; changed = true; }
+  if (typeof patched.paused_ms !== "number" || !Number.isFinite(patched.paused_ms) || patched.paused_ms < 0) {
+    patched.paused_ms = 0;
+    changed = true;
+  }
+  return changed ? patched : p;
 }
 
 pomodorosRouter.get("/pomodoros", async (req, res) => {
@@ -117,7 +125,7 @@ pomodorosRouter.get("/pomodoros/:id/activity", async (req, res) => {
 
 pomodorosRouter.post("/pomodoros", async (req, res) => {
   const body = req.body ?? {};
-  const { started_at, ended_at, target_duration_minutes, project_ids, task_ids, notes, freeTaskLabel, source, context } = body;
+  const { started_at, ended_at, target_duration_minutes, project_ids, task_ids, notes, freeTaskLabel, paused_ms, source, context } = body;
 
   if (typeof started_at !== "string" || !Number.isFinite(Date.parse(started_at))) {
     return res.status(400).json({ error: "started_at must be ISO string" });
@@ -140,6 +148,15 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
   }
   if (freeTaskLabel !== undefined && (typeof freeTaskLabel !== "string" || freeTaskLabel.length > 200)) {
     return res.status(400).json({ error: "freeTaskLabel must be string ≤200 chars" });
+  }
+  if (paused_ms !== undefined) {
+    if (typeof paused_ms !== "number" || !Number.isFinite(paused_ms) || paused_ms < 0) {
+      return res.status(400).json({ error: "paused_ms must be a non-negative finite number" });
+    }
+    const elapsed = Date.parse(ended_at) - Date.parse(started_at);
+    if (paused_ms > elapsed) {
+      return res.status(400).json({ error: "paused_ms cannot exceed wall-clock duration" });
+    }
   }
   if (source !== "live-timer" && source !== "manual") {
     return res.status(400).json({ error: "source must be live-timer or manual" });
@@ -183,6 +200,7 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
     task_ids: tIds,
     notes: notes ?? "",
     freeTaskLabel: typeof freeTaskLabel === "string" ? freeTaskLabel : "",
+    paused_ms: typeof paused_ms === "number" && Number.isFinite(paused_ms) ? paused_ms : 0,
     source,
     context: ctx,
   };
