@@ -6,6 +6,7 @@ const REST_KEY = "csv:active-rest";
 export interface LiveRestState {
   restEndsAt: number;
   proposal: { projectIds: string[]; taskIds: string[]; durationMinutes: number; freeTaskLabel?: string };
+  pausedAt?: number | null;  // ms timestamp when currently paused; null/undefined = running
 }
 
 export function loadRest(): LiveRestState | null {
@@ -28,6 +29,7 @@ export function loadRest(): LiveRestState | null {
           durationMinutes: v.proposal.durationMinutes,
           freeTaskLabel: typeof v.proposal.freeTaskLabel === "string" ? v.proposal.freeTaskLabel : "",
         },
+        pausedAt: typeof v.pausedAt === "number" ? v.pausedAt : null,
       };
     }
   } catch {}
@@ -48,6 +50,8 @@ export interface LiveTimerState {
   topicIds: string[];        // legacy field name kept for backwards compat: holds project IDs
   taskIds?: string[];        // optional, defaults to [] on load
   freeTaskLabel?: string;    // optional Free-project label, defaults to "" on load
+  pausedAt?: number | null;  // ms timestamp when currently paused; null/undefined = running
+  accumulatedPausedMs?: number; // total paused ms across prior pause spans; default 0
 }
 
 export function loadActive(): LiveTimerState | null {
@@ -66,6 +70,9 @@ export function loadActive(): LiveTimerState | null {
         topicIds: v.topicIds,
         taskIds: Array.isArray(v.taskIds) ? v.taskIds : [],
         freeTaskLabel: typeof v.freeTaskLabel === "string" ? v.freeTaskLabel : "",
+        pausedAt: typeof v.pausedAt === "number" ? v.pausedAt : null,
+        accumulatedPausedMs: typeof v.accumulatedPausedMs === "number" && v.accumulatedPausedMs >= 0
+          ? v.accumulatedPausedMs : 0,
       };
     }
   } catch {}
