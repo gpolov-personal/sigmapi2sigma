@@ -12,12 +12,30 @@
 # Mirrors to BACKUP_REMOTE (rclone) if configured in ~/.sigmapi2sigma/backup-config.
 set -euo pipefail
 
+# Ensure node is on PATH — cron's default PATH typically doesn't include nvm,
+# and we use node for the retention pruner below.
+if ! command -v node >/dev/null 2>&1; then
+  if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    # shellcheck disable=SC1091
+    \. "$HOME/.nvm/nvm.sh" --no-use >/dev/null 2>&1 || true
+    nvm use --silent default >/dev/null 2>&1 || true
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    NODE_BIN=$(ls -1d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)
+    [ -n "$NODE_BIN" ] && PATH="$NODE_BIN:$PATH"
+  fi
+fi
+
 DATA_DIR="$HOME/.sigmapi2sigma"
 BACKUP_DIR="$DATA_DIR/backups"
 CONFIG="$DATA_DIR/backup-config"
 CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
+LOG="$BACKUP_DIR/backup.log"
 
 mkdir -p "$BACKUP_DIR"
+
+# Log errors to a file so cron failures aren't silently swallowed.
+exec 2> >(tee -a "$LOG" >&2)
 
 TS=$(date +%Y-%m-%d-%H%M%S)
 BUNDLE="$BACKUP_DIR/sigmapi2sigma-$TS.tar.gz"
