@@ -5,7 +5,7 @@
 #   - Core JSONs:        projects, tasks, assignments, pomodoros, settings
 #   - Tmux state:        saved-tmux.json, tmux-bindings.jsonl, snapshots/
 #   - Shell history:     last 3 days of shell-history/*.jsonl
-#   - Claude sessions:   ~/.claude/projects/<encoded-cwd>/*.jsonl modified in last 7 days
+#   - Claude sessions:   ~/.claude/projects/<encoded-cwd>/*.jsonl modified in last 28 days
 #                        (ALL projects, not just this one) — staged under claude-conversations/
 #
 # Skips if no source has changed since the last bundle (use --force to override).
@@ -65,13 +65,13 @@ if [ -d "$DATA_DIR/shell-history" ]; then
   done
 fi
 
-# Last 7 days of Claude conversations across ALL projects.
+# Last 28 days of Claude conversations across ALL projects.
 CLAUDE_FILES=()
 if [ -d "$CLAUDE_PROJECTS_DIR" ]; then
   while IFS= read -r -d '' f; do
     CLAUDE_FILES+=("$f")
     SOURCES+=("$f")
-  done < <(find "$CLAUDE_PROJECTS_DIR" -type f -name "*.jsonl" -mtime -7 -print0)
+  done < <(find "$CLAUDE_PROJECTS_DIR" -type f -name "*.jsonl" -mtime -28 -print0)
 fi
 
 if [ ${#SOURCES[@]} -eq 0 ]; then
@@ -180,16 +180,4 @@ node -e '
 SIZE=$(du -h "$BUNDLE" | cut -f1)
 echo "wrote $BUNDLE ($SIZE)"
 
-# Optional cloud mirror.
-if [ -f "$CONFIG" ]; then
-  # shellcheck disable=SC1090
-  source "$CONFIG"
-fi
-if [ -n "${BACKUP_REMOTE:-}" ]; then
-  if command -v rclone >/dev/null 2>&1; then
-    rclone sync "$BACKUP_DIR" "$BACKUP_REMOTE" --include "*.tar.gz" 2>&1 \
-      || echo "rclone sync to $BACKUP_REMOTE failed"
-  else
-    echo "BACKUP_REMOTE set but rclone not installed; skipping cloud sync."
-  fi
-fi
+# Cloud mirroring is decoupled: see scripts/sync-backups.sh, run on its own cron schedule.
