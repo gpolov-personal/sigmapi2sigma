@@ -606,6 +606,9 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
             {tmuxName ? (
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm text-slate-200">{tmuxName}</span>
+                {!derivedStatus?.tmux_attached && (
+                  <span className="text-xs text-slate-500 italic" title="No live tmux session with this name. The binding is stored and will re-attach automatically when a session with this name appears.">(not live)</span>
+                )}
                 <button onClick={unassign} disabled={busy}
                   className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded">Unassign</button>
               </div>

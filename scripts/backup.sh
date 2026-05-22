@@ -1,52 +1,73 @@
 #!/usr/bin/env bash
-# Bundle the 5 core JSONs + last 3 days of shell history into a tar.gz under
-# ~/.sigmapi2sigma/backups/, then prune by retention policy. If BACKUP_REMOTE
-# is set in ~/.sigmapi2sigma/backup-config, mirror to that rclone remote.
+# Bundle a disaster-recovery snapshot under ~/.sigmapi2sigma/backups/.
+#
+# Contents:
+#   - Core JSONs:        projects, tasks, assignments, pomodoros, settings
+#   - Tmux state:        saved-tmux.json, tmux-bindings.jsonl, snapshots/
+#   - Shell history:     last 3 days of shell-history/*.jsonl
+#   - Claude sessions:   ~/.claude/projects/<encoded-cwd>/*.jsonl modified in last 7 days
+#                        (ALL projects, not just this one) — staged under claude-conversations/
+#
+# Skips if no source has changed since the last bundle (use --force to override).
+# Mirrors to BACKUP_REMOTE (rclone) if configured in ~/.sigmapi2sigma/backup-config.
 set -euo pipefail
 
 DATA_DIR="$HOME/.sigmapi2sigma"
 BACKUP_DIR="$DATA_DIR/backups"
 CONFIG="$DATA_DIR/backup-config"
+CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
 
 mkdir -p "$BACKUP_DIR"
 
 TS=$(date +%Y-%m-%d-%H%M%S)
 BUNDLE="$BACKUP_DIR/sigmapi2sigma-$TS.tar.gz"
 
-# Collect targets (skip files that don't exist yet).
-TARGETS=()
-for f in projects.json tasks.json assignments.json pomodoros.json settings.json; do
-  [ -f "$DATA_DIR/$f" ] && TARGETS+=("$f")
-done
-
-# Last 3 days of shell history (today + yesterday + day before).
-SHELL_DIR_REL="shell-history"
-if [ -d "$DATA_DIR/$SHELL_DIR_REL" ]; then
-  for offset in 0 1 2; do
-    DAY=$(date -d "$offset days ago" +%Y-%m-%d 2>/dev/null || date -v "-${offset}d" +%Y-%m-%d)
-    REL="$SHELL_DIR_REL/$DAY.jsonl"
-    [ -f "$DATA_DIR/$REL" ] && TARGETS+=("$REL")
-  done
-fi
-
-if [ ${#TARGETS[@]} -eq 0 ]; then
-  echo "Nothing to back up yet (no data files found in $DATA_DIR)."
-  exit 0
-fi
-
-# Skip-on-no-change: if every source file is older than the latest existing backup,
-# there's nothing new to capture. Always run when invoked with --force.
 FORCE=0
 for arg in "$@"; do [ "$arg" = "--force" ] && FORCE=1; done
 
+# Collect source paths (absolute) for the change-detection check.
+SOURCES=()
+for f in projects.json tasks.json assignments.json pomodoros.json settings.json \
+         saved-tmux.json tmux-bindings.jsonl; do
+  [ -f "$DATA_DIR/$f" ] && SOURCES+=("$DATA_DIR/$f")
+done
+[ -d "$DATA_DIR/snapshots" ] && while IFS= read -r -d '' s; do SOURCES+=("$s"); done \
+  < <(find "$DATA_DIR/snapshots" -maxdepth 1 -type f -name "*.json" -print0)
+
+# Last 3 days of shell history.
+SHELL_DAYS=()
+if [ -d "$DATA_DIR/shell-history" ]; then
+  for offset in 0 1 2; do
+    DAY=$(date -d "$offset days ago" +%Y-%m-%d 2>/dev/null || date -v "-${offset}d" +%Y-%m-%d)
+    F="$DATA_DIR/shell-history/$DAY.jsonl"
+    if [ -f "$F" ]; then
+      SOURCES+=("$F")
+      SHELL_DAYS+=("$DAY")
+    fi
+  done
+fi
+
+# Last 7 days of Claude conversations across ALL projects.
+CLAUDE_FILES=()
+if [ -d "$CLAUDE_PROJECTS_DIR" ]; then
+  while IFS= read -r -d '' f; do
+    CLAUDE_FILES+=("$f")
+    SOURCES+=("$f")
+  done < <(find "$CLAUDE_PROJECTS_DIR" -type f -name "*.jsonl" -mtime -7 -print0)
+fi
+
+if [ ${#SOURCES[@]} -eq 0 ]; then
+  echo "Nothing to back up yet (no source files found)."
+  exit 0
+fi
+
+# Skip-on-no-change: if every source is older than the latest bundle, bail.
 if [ $FORCE -eq 0 ]; then
   LAST_BACKUP=$(ls -t "$BACKUP_DIR"/sigmapi2sigma-*.tar.gz 2>/dev/null | head -1 || true)
   if [ -n "$LAST_BACKUP" ]; then
     CHANGED=0
-    for rel in "${TARGETS[@]}"; do
-      if [ "$DATA_DIR/$rel" -nt "$LAST_BACKUP" ]; then
-        CHANGED=1; break
-      fi
+    for s in "${SOURCES[@]}"; do
+      if [ "$s" -nt "$LAST_BACKUP" ]; then CHANGED=1; break; fi
     done
     if [ $CHANGED -eq 0 ]; then
       echo "No source changes since $(basename "$LAST_BACKUP") — skipping."
@@ -55,10 +76,54 @@ if [ $FORCE -eq 0 ]; then
   fi
 fi
 
-# Build the bundle from the data dir so paths inside are relative.
-tar -C "$DATA_DIR" -czf "$BUNDLE" "${TARGETS[@]}"
+# Stage everything into a temp dir so tar can build a clean layout
+# that mixes data-dir contents with files from outside the data dir
+# (Claude conversations).
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
 
-# Apply retention policy via Node (cleaner than bash for date math + grouping).
+# Data-dir files at the bundle root.
+for f in projects.json tasks.json assignments.json pomodoros.json settings.json \
+         saved-tmux.json tmux-bindings.jsonl; do
+  [ -f "$DATA_DIR/$f" ] && ln "$DATA_DIR/$f" "$STAGE/$f" 2>/dev/null || \
+    { [ -f "$DATA_DIR/$f" ] && cp "$DATA_DIR/$f" "$STAGE/$f"; }
+done
+
+# Snapshots subdir.
+if [ -d "$DATA_DIR/snapshots" ]; then
+  mkdir -p "$STAGE/snapshots"
+  for src in "$DATA_DIR/snapshots"/*.json; do
+    [ -f "$src" ] || continue
+    base="$(basename "$src")"
+    ln "$src" "$STAGE/snapshots/$base" 2>/dev/null || cp "$src" "$STAGE/snapshots/$base"
+  done
+fi
+
+# Shell-history (last 3 days).
+if [ ${#SHELL_DAYS[@]} -gt 0 ]; then
+  mkdir -p "$STAGE/shell-history"
+  for d in "${SHELL_DAYS[@]}"; do
+    src="$DATA_DIR/shell-history/$d.jsonl"
+    [ -f "$src" ] || continue
+    ln "$src" "$STAGE/shell-history/$d.jsonl" 2>/dev/null || cp "$src" "$STAGE/shell-history/$d.jsonl"
+  done
+fi
+
+# Claude conversations (last 7 days, all projects), preserving the <encoded-cwd>/<uuid>.jsonl layout.
+if [ ${#CLAUDE_FILES[@]} -gt 0 ]; then
+  mkdir -p "$STAGE/claude-conversations"
+  for src in "${CLAUDE_FILES[@]}"; do
+    rel="${src#$CLAUDE_PROJECTS_DIR/}"
+    dest="$STAGE/claude-conversations/$rel"
+    mkdir -p "$(dirname "$dest")"
+    ln "$src" "$dest" 2>/dev/null || cp "$src" "$dest"
+  done
+fi
+
+# Build the bundle.
+tar -C "$STAGE" -czf "$BUNDLE" .
+
+# Retention: keep all <=24h, one per day for 1–30d, one per month for 30–365d, drop >365d.
 node -e '
   const fs = require("fs");
   const path = require("path");
@@ -67,13 +132,12 @@ node -e '
   const DAY = 86_400_000;
   const files = fs.readdirSync(dir).filter(f => /^sigmapi2sigma-.*\.tar\.gz$/.test(f));
   const parsed = files.map(f => {
-    // Accept both HHMM (legacy) and HHMMSS (current) forms.
     const m = /^sigmapi2sigma-(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})?\.tar\.gz$/.exec(f);
     if (!m) return null;
     const [, y, mo, d, hh, mm, ss] = m;
     const ts = new Date(+y, +mo - 1, +d, +hh, +mm, ss ? +ss : 0).getTime();
     return { f, ts, day: `${y}-${mo}-${d}`, month: `${y}-${mo}` };
-  }).filter(Boolean).sort((a, b) => b.ts - a.ts);   // newest first
+  }).filter(Boolean).sort((a, b) => b.ts - a.ts);
   const keepDay = new Set();
   const keepMonth = new Set();
   const toDelete = [];
@@ -88,7 +152,6 @@ node -e '
       if (keepDay.has(p.day)) toDelete.push(p.f);
       else keepDay.add(p.day);
     }
-    // ≤ 24h: keep all
   }
   for (const f of toDelete) {
     fs.unlinkSync(path.join(dir, f));
@@ -96,9 +159,10 @@ node -e '
   }
 ' "$BACKUP_DIR"
 
-echo "wrote $BUNDLE"
+SIZE=$(du -h "$BUNDLE" | cut -f1)
+echo "wrote $BUNDLE ($SIZE)"
 
-# Optional cloud mirror via rclone.
+# Optional cloud mirror.
 if [ -f "$CONFIG" ]; then
   # shellcheck disable=SC1090
   source "$CONFIG"
