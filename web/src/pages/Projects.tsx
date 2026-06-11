@@ -51,6 +51,7 @@ function attributeMinutes(
 export function Projects() {
   const { projects, tasksByProject, taskById, assignmentsByTmux, derivedStatusByProjectId, projectsAnchor, loading, createProject } = useProjects();
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -97,31 +98,56 @@ export function Projects() {
   }, [projects, search]);
 
   const grouped = useMemo(() => {
-    const open: Project[] = [];
+    const activeVisible: Project[] = [];
+    const parkedVisible: Project[] = [];
+    const hiddenActive: Project[] = [];
+    const hiddenParked: Project[] = [];
     const completed: Project[] = [];
-    for (const p of filtered) (p.completed_at ? completed : open).push(p);
-    open.sort((a, b) => {
-      // Free always first.
+    for (const p of filtered) {
+      if (p.completed_at) { completed.push(p); continue; }
+      const eng = derivedStatusByProjectId.get(p.id)?.engagement ?? "parked";
+      if (p.hidden) (eng === "active" ? hiddenActive : hiddenParked).push(p);
+      else (eng === "active" ? activeVisible : parkedVisible).push(p);
+    }
+    // Within a section: Free first, in_progress before not_started, then by name.
+    const cmp = (a: Project, b: Project) => {
       if (a.system && !b.system) return -1;
       if (!a.system && b.system) return 1;
       const da = derivedStatusByProjectId.get(a.id);
       const db = derivedStatusByProjectId.get(b.id);
-      // Active before parked.
-      const ea = da?.engagement ?? "parked";
-      const eb = db?.engagement ?? "parked";
-      if (ea !== eb) return ea === "active" ? -1 : 1;
-      // Within engagement: in_progress before not_started.
       const pa = da?.progress ?? "not_started";
       const pb = db?.progress ?? "not_started";
       const progOrder = { in_progress: 0, not_started: 1, completed: 2 };
       if (pa !== pb) return progOrder[pa] - progOrder[pb];
       return a.name.localeCompare(b.name);
-    });
+    };
+    activeVisible.sort(cmp);
+    parkedVisible.sort(cmp);
+    hiddenActive.sort(cmp);
+    hiddenParked.sort(cmp);
     completed.sort((a, b) => (b.completed_at ?? "").localeCompare(a.completed_at ?? ""));
-    return { open, completed };
+    return { activeVisible, parkedVisible, hiddenActive, hiddenParked, completed };
   }, [filtered, derivedStatusByProjectId]);
 
+  const hiddenCount = grouped.hiddenActive.length + grouped.hiddenParked.length;
+
   const selected = selectedId ? projects.find(p => p.id === selectedId) ?? null : null;
+
+  const renderGrid = (list: Project[]) => (
+    <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(26rem, 1fr))" }}>
+      {list.map(p => (
+        <ProjectCard
+          key={p.id}
+          project={p}
+          tasks={tasksByProject.get(p.id) ?? []}
+          derivedStatus={derivedStatusByProjectId.get(p.id) ?? null}
+          stats={statsByProject.get(p.id) ?? emptyStats()}
+          minsByTask={minsByTask}
+          onClick={() => setSelectedId(p.id)}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -138,53 +164,74 @@ export function Projects() {
           onChange={e => setSearch(e.target.value)}
           className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
         />
-        <label className="flex items-center gap-2 text-sm text-slate-400 ml-auto">
-          <input
-            type="checkbox" checked={showCompleted}
-            onChange={e => setShowCompleted(e.target.checked)}
-          />
-          Show completed
-        </label>
+        <div className="ml-auto flex items-center gap-4">
+          <label className="flex items-center gap-2 text-sm text-slate-400">
+            <input
+              type="checkbox" checked={showCompleted}
+              onChange={e => setShowCompleted(e.target.checked)}
+            />
+            Show completed
+          </label>
+          {hiddenCount > 0 && (
+            <label className="flex items-center gap-2 text-sm text-slate-400">
+              <input
+                type="checkbox" checked={showHidden}
+                onChange={e => setShowHidden(e.target.checked)}
+              />
+              Show hidden ({grouped.hiddenActive.length} active, {grouped.hiddenParked.length} parked)
+            </label>
+          )}
+        </div>
       </div>
 
       <AnchorHeader anchor={projectsAnchor} />
 
       {loading && <div className="text-slate-500 text-sm">Loading…</div>}
 
-      {!loading && grouped.open.length === 0 && grouped.completed.length === 0 && (
+      {!loading
+        && grouped.activeVisible.length === 0
+        && grouped.parkedVisible.length === 0
+        && grouped.completed.length === 0
+        && hiddenCount === 0 && (
         <div className="text-slate-500 text-sm">No projects yet.</div>
       )}
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(26rem, 1fr))" }}>
-        {grouped.open.map(p => (
-          <ProjectCard
-            key={p.id}
-            project={p}
-            tasks={tasksByProject.get(p.id) ?? []}
-            derivedStatus={derivedStatusByProjectId.get(p.id) ?? null}
-            stats={statsByProject.get(p.id) ?? emptyStats()}
-            minsByTask={minsByTask}
-            onClick={() => setSelectedId(p.id)}
-          />
-        ))}
-      </div>
+      {grouped.activeVisible.length > 0 && (
+        <>
+          <div className="text-sm text-slate-400">Active ({grouped.activeVisible.length})</div>
+          {renderGrid(grouped.activeVisible)}
+        </>
+      )}
+
+      {grouped.parkedVisible.length > 0 && (
+        <>
+          <div className="text-sm text-slate-400 mt-6">Parked ({grouped.parkedVisible.length})</div>
+          {renderGrid(grouped.parkedVisible)}
+        </>
+      )}
 
       {showCompleted && grouped.completed.length > 0 && (
         <>
           <div className="text-sm text-slate-400 mt-6">Completed ({grouped.completed.length})</div>
-          <div className="grid gap-4" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(26rem, 1fr))" }}>
-            {grouped.completed.map(p => (
-              <ProjectCard
-                key={p.id}
-                project={p}
-                tasks={tasksByProject.get(p.id) ?? []}
-                derivedStatus={derivedStatusByProjectId.get(p.id) ?? null}
-                stats={statsByProject.get(p.id) ?? emptyStats()}
-                minsByTask={minsByTask}
-                onClick={() => setSelectedId(p.id)}
-              />
-            ))}
-          </div>
+          {renderGrid(grouped.completed)}
+        </>
+      )}
+
+      {showHidden && hiddenCount > 0 && (
+        <>
+          <div className="text-sm text-slate-300 mt-8 font-medium">Hidden</div>
+          {grouped.hiddenActive.length > 0 && (
+            <>
+              <div className="text-xs text-slate-500 mt-2 ml-1">Active ({grouped.hiddenActive.length})</div>
+              {renderGrid(grouped.hiddenActive)}
+            </>
+          )}
+          {grouped.hiddenParked.length > 0 && (
+            <>
+              <div className="text-xs text-slate-500 mt-2 ml-1">Parked ({grouped.hiddenParked.length})</div>
+              {renderGrid(grouped.hiddenParked)}
+            </>
+          )}
         </>
       )}
 
