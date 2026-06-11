@@ -25,6 +25,7 @@ export interface Project {
   abbreviation: string | null;    // manual override; null = auto-computed from name
   working_dir: string | null;     // optional cwd used when creating a tmux session for this project
   completed_at: string | null;
+  hidden: boolean;                 // manual visibility flag; pure presentation, orthogonal to status
   created_at: string;
   updated_at: string;
   system?: boolean;       // true for the Free project; cannot be deleted/completed
@@ -77,6 +78,7 @@ function buildFreeProject(now: string): Project {
     abbreviation: null,
     working_dir: null,
     completed_at: null,
+    hidden: false,
     created_at: now,
     updated_at: now,
     system: true,
@@ -98,6 +100,7 @@ async function loadProjects(): Promise<ProjectsFile> {
   for (const p of file.projects) {
     if (p.abbreviation === undefined) { p.abbreviation = null; mutated = true; }
     if (p.working_dir === undefined) { p.working_dir = null; mutated = true; }
+    if (p.hidden === undefined) { p.hidden = false; mutated = true; }
   }
   if (mutated) await writeJsonAtomic(PROJECTS_FILE, file);
   return file;
@@ -167,6 +170,9 @@ function validateProjectInput(
       return { status: 400, error: "working_dir should be an absolute path (start with / or ~)" };
     }
   }
+  if (body.hidden !== undefined && typeof body.hidden !== "boolean") {
+    return { status: 400, error: "hidden must be boolean" };
+  }
   return null;
 }
 
@@ -222,6 +228,7 @@ projectsRouter.post("/projects", async (req, res) => {
     abbreviation: body.abbreviation ? body.abbreviation.trim() : null,
     working_dir: body.working_dir && body.working_dir.trim() ? body.working_dir.trim() : null,
     completed_at: body.completed_at ?? null,
+    hidden: false,
     created_at: now,
     updated_at: now,
   };
@@ -230,7 +237,7 @@ projectsRouter.post("/projects", async (req, res) => {
   res.json(project);
 });
 
-const ALLOWED_PATCH = new Set(["name", "color", "tags", "notes", "completed_at", "abbreviation", "working_dir"]);
+const ALLOWED_PATCH = new Set(["name", "color", "tags", "notes", "completed_at", "abbreviation", "working_dir", "hidden"]);
 
 projectsRouter.patch("/projects/:id", async (req, res) => {
   const body = req.body ?? {};
@@ -250,6 +257,17 @@ projectsRouter.patch("/projects/:id", async (req, res) => {
     }
   }
 
+  // Hide guards: completed and system/Free projects cannot be hidden.
+  const willBeCompleted = body.completed_at !== undefined
+    ? body.completed_at !== null
+    : prev.completed_at !== null;
+  if (body.hidden === true && willBeCompleted) {
+    return res.status(409).json({ error: "completed projects cannot be hidden" });
+  }
+  if (body.hidden === true && prev.system) {
+    return res.status(409).json({ error: "the Free project cannot be hidden" });
+  }
+
   const err = validateProjectInput(body, file.projects, req.params.id);
   if (err) return res.status(err.status).json({ error: err.error, ...(err.details ? { details: err.details } : {}) });
 
@@ -262,8 +280,14 @@ projectsRouter.patch("/projects/:id", async (req, res) => {
     ...(body.completed_at !== undefined ? { completed_at: body.completed_at } : {}),
     ...(body.abbreviation !== undefined ? { abbreviation: body.abbreviation === null || body.abbreviation === "" ? null : body.abbreviation.trim() } : {}),
     ...(body.working_dir !== undefined ? { working_dir: body.working_dir === null || (typeof body.working_dir === "string" && body.working_dir.trim() === "") ? null : body.working_dir.trim() } : {}),
+    ...(body.hidden !== undefined ? { hidden: !!body.hidden } : {}),
     updated_at: new Date().toISOString(),
   };
+
+  // Completing a project always clears hidden — completed projects are never hidden.
+  if (body.completed_at !== undefined && body.completed_at !== null) {
+    next.hidden = false;
+  }
 
   // Auto-release tmux assignment when marking completed.
   if (body.completed_at !== undefined && body.completed_at !== null && prev.completed_at === null) {
