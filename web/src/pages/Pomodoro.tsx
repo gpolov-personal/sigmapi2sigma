@@ -59,6 +59,7 @@ export function PomodoroPage() {
   const [now, setNow] = useState(Date.now());
   const [pickedProjects, setPickedProjects] = useState<string[]>([]);
   const [showCompletedInPicker, setShowCompletedInPicker] = useState(false);
+  const [showHiddenInPicker, setShowHiddenInPicker] = useState(false);
   const [pickedTasks, setPickedTasks] = useState<string[]>([]);
   const [freeTaskLabel, setFreeTaskLabel] = useState<string>(() => loadActive()?.freeTaskLabel ?? "");
   const [duration, setDuration] = useState<number>(settings.defaultPomodoroDuration);
@@ -297,9 +298,12 @@ export function PomodoroPage() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [todayPoms, taskById]);
 
-  const eligibleProjects = showCompletedInPicker
-    ? projects
-    : projects.filter(p => !p.completed_at);
+  const hiddenInPickerCount = projects.filter(p => p.hidden).length;
+  const eligibleProjects = projects.filter(p => {
+    if (!showCompletedInPicker && p.completed_at) return false;
+    if (!showHiddenInPicker && p.hidden) return false;
+    return true;
+  });
   const eligibleTasksForPicked = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const pid of pickedProjects) {
@@ -451,6 +455,16 @@ export function PomodoroPage() {
                     onChange={e => setShowCompletedInPicker(e.target.checked)}
                   />
                   Show completed
+                </label>
+              )}
+              {!active && hiddenInPickerCount > 0 && (
+                <label className="flex items-center gap-1 text-xs text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={showHiddenInPicker}
+                    onChange={e => setShowHiddenInPicker(e.target.checked)}
+                  />
+                  Show hidden
                 </label>
               )}
               {!active ? (
