@@ -105,6 +105,7 @@ export interface Project {
   abbreviation: string | null;
   working_dir: string | null;
   completed_at: string | null;
+  hidden: boolean;
   created_at: string;
   updated_at: string;
   system?: boolean;
