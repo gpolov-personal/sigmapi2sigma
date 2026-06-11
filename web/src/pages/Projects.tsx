@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, X, Trash2, Check, RotateCcw, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, X, Trash2, Check, RotateCcw, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { Pomodoro, Project, Task, PROJECT_PALETTE, apiRequest } from "../api";
 import type { DerivedStatus } from "../api";
 import { useProjects, NewProject, NewTask } from "../ProjectsContext";
@@ -454,6 +454,15 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
     finally { setBusy(false); }
   }
 
+  async function toggleHidden() {
+    setError(null); setBusy(true);
+    try {
+      await updateProject(project.id, { hidden: !project.hidden });
+      onClose();
+    } catch (e: any) { setError(String(e?.message ?? e)); }
+    finally { setBusy(false); }
+  }
+
   async function doDelete() {
     if (!confirm(`Delete project "${project.name}"?`)) return;
     setError(null); setBusy(true);
@@ -684,6 +693,15 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
               <button onClick={toggleComplete} disabled={busy}
                 className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm">
                 {project.completed_at ? <><RotateCcw size={14} /> Reopen</> : <><Check size={14} /> Mark complete</>}
+              </button>
+            )}
+            {!project.system && (
+              <button onClick={toggleHidden} disabled={busy || !!project.completed_at}
+                title={project.completed_at
+                  ? "Completed projects can't be hidden"
+                  : (project.hidden ? "Show this project in the main list" : "Hide this project from the main list")}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm disabled:opacity-50">
+                {project.hidden ? <><Eye size={14} /> Unhide</> : <><EyeOff size={14} /> Hide</>}
               </button>
             )}
             {!project.system && (
