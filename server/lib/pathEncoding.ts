@@ -7,6 +7,4 @@ export function encodeCwd(cwd: string): string {
 import os from "node:os";
 import path from "node:path";
 
-export const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), ".claude", "projects");
-
 export const DATA_DIR = path.join(os.homedir(), ".sigmapi2sigma");

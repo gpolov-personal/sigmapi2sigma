@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
-import { CLAUDE_PROJECTS_DIR } from "./pathEncoding.js";
+import { loadAccounts } from "./accounts.js";
 
 export interface SessionMeta {
   id: string;
@@ -18,6 +18,7 @@ export interface SessionMeta {
   lastTs: string | null;
   lastUserPrompt: string | null;
   lastUserTs: string | null;
+  accounts: string[];   // account names whose dirs hold this UUID; [] until attached by caller
 }
 
 function safeParse(line: string): any | null {
@@ -119,6 +120,7 @@ export async function readSessionMeta(jsonlPath: string): Promise<SessionMeta | 
       lastTs,
       lastUserPrompt,
       lastUserTs,
+      accounts: [],
     };
     cache.set(jsonlPath, { key, value: meta });
     return meta;
@@ -127,22 +129,52 @@ export async function readSessionMeta(jsonlPath: string): Promise<SessionMeta | 
   }
 }
 
-// List all top-level JSONL files under ~/.claude/projects (exclude subagents/).
-export async function listAllSessionFiles(): Promise<string[]> {
-  const out: string[] = [];
-  let entries;
-  try { entries = await fs.readdir(CLAUDE_PROJECTS_DIR, { withFileTypes: true }); }
-  catch { return out; }
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    const proj = path.join(CLAUDE_PROJECTS_DIR, e.name);
-    let files;
-    try { files = await fs.readdir(proj); } catch { continue; }
-    for (const f of files) {
-      if (f.endsWith(".jsonl")) out.push(path.join(proj, f));
+export interface TaggedFile { path: string; account: string; }
+
+// Every top-level session jsonl across all configured accounts, tagged by account.
+export async function listAllSessionFiles(): Promise<TaggedFile[]> {
+  const out: TaggedFile[] = [];
+  for (const acc of loadAccounts()) {
+    let entries;
+    try { entries = await fs.readdir(acc.projectsDir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const proj = path.join(acc.projectsDir, e.name);
+      let files;
+      try { files = await fs.readdir(proj); } catch { continue; }
+      for (const f of files) if (f.endsWith(".jsonl")) out.push({ path: path.join(proj, f), account: acc.name });
     }
   }
   return out;
+}
+
+export interface DedupedSession { id: string; path: string; accounts: string[]; }
+
+// Pure grouping helper (unit-tested): one entry per UUID, accounts = sorted set,
+// representative path = newest mtime (surfaces the active side of a diverged copy).
+export function dedupeTaggedFiles(
+  rows: { id: string; path: string; account: string; mtime: number }[]
+): DedupedSession[] {
+  const byId = new Map<string, { path: string; mtime: number; accounts: Set<string> }>();
+  for (const r of rows) {
+    const cur = byId.get(r.id);
+    if (!cur) byId.set(r.id, { path: r.path, mtime: r.mtime, accounts: new Set([r.account]) });
+    else { cur.accounts.add(r.account); if (r.mtime > cur.mtime) { cur.mtime = r.mtime; cur.path = r.path; } }
+  }
+  return [...byId.entries()].map(([id, v]) => ({ id, path: v.path, accounts: [...v.accounts].sort() }));
+}
+
+// Deduped sessions across all accounts.
+export async function listDedupedSessions(): Promise<DedupedSession[]> {
+  const tagged = await listAllSessionFiles();
+  const rows: { id: string; path: string; account: string; mtime: number }[] = [];
+  for (const t of tagged) {
+    let mtime = 0;
+    try { mtime = (await fs.stat(t.path)).mtimeMs; } catch { continue; }
+    rows.push({ id: path.basename(t.path, ".jsonl"), path: t.path, account: t.account, mtime });
+  }
+  return dedupeTaggedFiles(rows);
 }
 
 export interface JsonlMessage {
