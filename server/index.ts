@@ -10,8 +10,19 @@ import { assignmentsRouter } from "./routes/assignments.js";
 import { settingsRouter } from "./routes/settings.js";
 import { pomodorosRouter } from "./routes/pomodoros.js";
 import { backupsRouter } from "./routes/backups.js";
+import { loadAccounts } from "./lib/accounts.js";
 
 const app = express();
+
+// Validate account config before serving. Bad accounts.json is fatal (decision A).
+try {
+  const accounts = loadAccounts();
+  console.log(`sigmapi2sigma accounts: ${accounts.map(a => `${a.name}→${a.configDir}`).join(", ")}`);
+} catch (e: any) {
+  console.error(`FATAL: ${e.message}`);
+  process.exit(1);
+}
+
 app.use(express.json({ limit: "1mb" }));
 
 app.use("/api", sessionsRouter);
