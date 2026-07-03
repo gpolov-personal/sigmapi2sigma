@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listAllSessionFiles, readSessionMeta, readSessionDetail } from "../lib/jsonl.js";
+import { listAllSessionFiles, listDedupedSessions, readSessionMeta, readSessionDetail } from "../lib/jsonl.js";
 import { getLastLocationsBySessionId } from "../lib/tmuxBindings.js";
 
 export const sessionsRouter = Router();
@@ -8,9 +8,11 @@ sessionsRouter.get("/sessions", async (req, res) => {
   const hours = Number(req.query.hours ?? 24);
   const useWindow = Number.isFinite(hours) && hours > 0;
 
-  const files = await listAllSessionFiles();
-  const allMetas = (await Promise.all(files.map(readSessionMeta)))
-    .filter((m): m is NonNullable<typeof m> => !!m);
+  const deduped = await listDedupedSessions();
+  const allMetas = (await Promise.all(deduped.map(async d => {
+    const m = await readSessionMeta(d.path);
+    return m ? { ...m, accounts: d.accounts } : null;
+  }))).filter((m): m is NonNullable<typeof m> => !!m);
 
   // Anchor = max(mtime) across ALL sessions, regardless of the window filter.
   // The window is then [anchor - hours*3600*1000, anchor].
@@ -47,9 +49,16 @@ sessionsRouter.get("/sessions", async (req, res) => {
 
 sessionsRouter.get("/sessions/:id", async (req, res) => {
   const files = await listAllSessionFiles();
-  const match = files.find(f => f.endsWith(`/${req.params.id}.jsonl`));
-  if (!match) return res.status(404).json({ error: "not found" });
-  const meta = await readSessionMeta(match);
-  const detail = await readSessionDetail(match);
-  res.json({ meta, detail });
+  const matches = files.filter(f => f.path.endsWith(`/${req.params.id}.jsonl`));
+  if (matches.length === 0) return res.status(404).json({ error: "not found" });
+  // Newest copy across accounts is the representative.
+  let best = matches[0]; let bestM = 0;
+  for (const m of matches) {
+    let mt = 0; try { mt = (await (await import("node:fs/promises")).stat(m.path)).mtimeMs; } catch {}
+    if (mt >= bestM) { bestM = mt; best = m; }
+  }
+  const accounts = [...new Set(matches.map(m => m.account))].sort();
+  const meta = await readSessionMeta(best.path);
+  const detail = await readSessionDetail(best.path);
+  res.json({ meta: meta ? { ...meta, accounts } : meta, detail });
 });
