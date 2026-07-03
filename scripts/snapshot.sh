@@ -3,9 +3,10 @@
 # No-op if tmux is not running. Safe to call from cron.
 set -euo pipefail
 
+. "$(dirname "$0")/lib/accounts.sh"
+
 DATA_DIR="$HOME/.sigmapi2sigma"
 SNAP_DIR="$DATA_DIR/snapshots"
-CLAUDE_PROJECTS="$HOME/.claude/projects"
 
 mkdir -p "$SNAP_DIR"
 
@@ -19,11 +20,14 @@ encode_cwd() {
 # Given a pane cwd and command, resolve the most recently active claude session id.
 # Echoes sessionId or empty string.
 resolve_claude_session() {
-  local cwd="$1" cmd="$2"
+  local cwd="$1" cmd="$2" acct="$3"
   [[ "$cmd" == "claude" ]] || { echo ""; return 0; }
-  local enc proj newest
+  [[ -n "$acct" ]] || { echo ""; return 0; }
+  local pdir enc proj newest
+  pdir=$(sp2s_load_accounts | awk -F'\t' -v n="$acct" '$1==n{print $2}')
+  [[ -n "$pdir" ]] || { echo ""; return 0; }
   enc=$(encode_cwd "$cwd")
-  proj="$CLAUDE_PROJECTS/$enc"
+  proj="$pdir/projects/$enc"
   [[ -d "$proj" ]] || { echo ""; return 0; }
   # Most recently modified top-level JSONL (not in subagents/).
   newest=$(find "$proj" -maxdepth 1 -name "*.jsonl" -printf "%T@ %p\n" 2>/dev/null \
@@ -36,11 +40,14 @@ resolve_claude_session() {
 # Given a pane cwd and session id, read the JSONL tail (last 256 KB) and extract
 # the most recent "cwd" field. Echoes path or empty string.
 resolve_claude_last_cwd() {
-  local cwd="$1" sid="$2"
+  local cwd="$1" sid="$2" acct="$3"
   [[ -n "$sid" ]] || { echo ""; return 0; }
-  local enc proj file
+  [[ -n "$acct" ]] || { echo ""; return 0; }
+  local pdir enc file
+  pdir=$(sp2s_load_accounts | awk -F'\t' -v n="$acct" '$1==n{print $2}')
+  [[ -n "$pdir" ]] || { echo ""; return 0; }
   enc=$(encode_cwd "$cwd")
-  file="$CLAUDE_PROJECTS/$enc/$sid.jsonl"
+  file="$pdir/projects/$enc/$sid.jsonl"
   [[ -f "$file" ]] || { echo ""; return 0; }
   tail -c 262144 "$file" 2>/dev/null \
     | awk -F'"cwd":"' 'NF>1 { split($2, a, "\""); last=a[1] } END { if (last) print last }'
@@ -49,11 +56,14 @@ resolve_claude_last_cwd() {
 # Read JSONL header (~8 KB) and extract the first permissionMode it finds
 # (the launch-time permission mode). Echoes mode or empty string.
 resolve_claude_permission_mode() {
-  local cwd="$1" sid="$2"
+  local cwd="$1" sid="$2" acct="$3"
   [[ -n "$sid" ]] || { echo ""; return 0; }
-  local enc file
+  [[ -n "$acct" ]] || { echo ""; return 0; }
+  local pdir enc file
+  pdir=$(sp2s_load_accounts | awk -F'\t' -v n="$acct" '$1==n{print $2}')
+  [[ -n "$pdir" ]] || { echo ""; return 0; }
   enc=$(encode_cwd "$cwd")
-  file="$CLAUDE_PROJECTS/$enc/$sid.jsonl"
+  file="$pdir/projects/$enc/$sid.jsonl"
   [[ -f "$file" ]] || { echo ""; return 0; }
   head -c 8192 "$file" 2>/dev/null \
     | awk -F'"permissionMode":"' 'NF>1 { split($2, a, "\""); print a[1]; exit }'
@@ -74,9 +84,10 @@ while IFS=$'\t' read -r sess_name; do
     panes_json="[]"
     while IFS=$'\t' read -r pane_idx pane_id pane_pid pane_cmd pane_cwd; do
       [[ -n "$pane_idx" ]] || continue
-      claude_sid=$(resolve_claude_session "$pane_cwd" "$pane_cmd")
-      claude_last_cwd=$(resolve_claude_last_cwd "$pane_cwd" "$claude_sid")
-      claude_perm_mode=$(resolve_claude_permission_mode "$pane_cwd" "$claude_sid")
+      claude_account=$(sp2s_account_for_pid "$pane_pid")
+      claude_sid=$(resolve_claude_session "$pane_cwd" "$pane_cmd" "$claude_account")
+      claude_last_cwd=$(resolve_claude_last_cwd "$pane_cwd" "$claude_sid" "$claude_account")
+      claude_perm_mode=$(resolve_claude_permission_mode "$pane_cwd" "$claude_sid" "$claude_account")
       pane_obj=$(jq -n \
         --argjson index "$pane_idx" \
         --arg paneId "$pane_id" \
@@ -84,10 +95,12 @@ while IFS=$'\t' read -r sess_name; do
         --arg cmd "$pane_cmd" \
         --arg cwd "$pane_cwd" \
         --arg claudeSessionId "$claude_sid" \
+        --arg claudeAccount "$claude_account" \
         --arg claudeLastCwd "$claude_last_cwd" \
         --arg claudePermissionMode "$claude_perm_mode" \
         '{index:$index, paneId:$paneId, pid:$pid, cmd:$cmd, cwd:$cwd,
           claudeSessionId:      (if $claudeSessionId==""      then null else $claudeSessionId      end),
+          claudeAccount:        (if $claudeAccount==""        then null else $claudeAccount        end),
           claudeLastCwd:        (if $claudeLastCwd==""        then null else $claudeLastCwd        end),
           claudePermissionMode: (if $claudePermissionMode=="" then null else $claudePermissionMode end)}')
       panes_json=$(jq --argjson p "$pane_obj" '. + [$p]' <<<"$panes_json")
