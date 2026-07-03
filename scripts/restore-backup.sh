@@ -89,35 +89,48 @@ if [ -d "$TMP/shell-history" ]; then
 fi
 
 # Claude conversations: copy any included files (don't wipe other projects/sessions).
+# Each top-level entry under claude-conversations/ is one of three cases:
+#   1. matches a configured account name  -> restore into that account's projects dir
+#   2. starts with "-" (Claude-encoded cwd) -> legacy flat bundle; restore under
+#      $HOME/.claude/projects/<encoded-cwd>/... (the pre-account default location)
+#   3. anything else -> unknown account (e.g. from another machine); warn + skip
 if [ -d "$TMP/claude-conversations" ] && [ "$NO_CONVERSATIONS" -eq 0 ]; then
   count=0
+  legacy_count=0
   # Build a name→projectsDir map from current config.
   declare -A ACC_DIR
   while IFS=$'\t' read -r acct pdir; do ACC_DIR["$acct"]="$pdir/projects"; done < <(sp2s_load_accounts)
   for adir in "$TMP/claude-conversations"/*/; do
     [ -d "$adir" ] || continue
-    acct="$(basename "$adir")"
-    target="${ACC_DIR[$acct]:-}"
-    if [ -z "$target" ]; then
-      echo "warn: backup contains account '$acct' not in current accounts.json — skipping" >&2
-      continue
+    name="$(basename "$adir")"
+    target="${ACC_DIR[$name]:-}"
+    if [ -n "$target" ]; then
+      # Case 1: configured account.
+      mkdir -p "$target"
+      while IFS= read -r -d '' src; do
+        rel="${src#$adir}"
+        dest="$target/$rel"
+        mkdir -p "$(dirname "$dest")"
+        atomic_swap "$src" "$dest"
+        count=$((count + 1))
+      done < <(find "$adir" -type f -name "*.jsonl" -print0)
+    elif [[ "$name" == -* ]]; then
+      # Case 2: legacy flat bundle (encoded-cwd dir) — restore relative to
+      # claude-conversations/ into the pre-feature default projects dir.
+      while IFS= read -r -d '' src; do
+        rel="${src#$TMP/claude-conversations/}"
+        dest="$HOME/.claude/projects/$rel"
+        mkdir -p "$(dirname "$dest")"
+        atomic_swap "$src" "$dest"
+        legacy_count=$((legacy_count + 1))
+      done < <(find "$adir" -type f -name "*.jsonl" -print0)
+    else
+      # Case 3: unknown account.
+      echo "warn: backup contains account '$name' not in current accounts.json — skipping" >&2
     fi
-    mkdir -p "$target"
-    while IFS= read -r -d '' src; do
-      rel="${src#$adir}"
-      dest="$target/$rel"
-      mkdir -p "$(dirname "$dest")"
-      atomic_swap "$src" "$dest"
-      count=$((count + 1))
-    done < <(find "$adir" -type f -name "*.jsonl" -print0)
   done
-  # Legacy flat backups (pre-account): files directly under claude-conversations/<encoded-cwd>/…
-  legacy_target="$HOME/.claude/projects"
-  while IFS= read -r -d '' src; do
-    rel="${src#$TMP/claude-conversations/}"
-    case "$rel" in */*/*) : ;; *) continue ;; esac   # skip; per-account handled above
-  done < <(find "$TMP/claude-conversations" -maxdepth 2 -type f -name "*.jsonl" -print0)
   [ $count -gt 0 ] && echo "restored $count claude-conversation file(s) across accounts"
+  [ $legacy_count -gt 0 ] && echo "restored $legacy_count legacy flat claude-conversation file(s)"
 fi
 
 echo "Restore complete. Restart the dev server (npm run stop && npm run dev) to pick up changes."
