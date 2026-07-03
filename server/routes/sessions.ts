@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listAllSessionFiles, listDedupedSessions, readSessionMeta, readSessionDetail } from "../lib/jsonl.js";
+import { listDedupedSessions, readSessionMeta, readSessionDetail } from "../lib/jsonl.js";
 import { getLastLocationsBySessionId } from "../lib/tmuxBindings.js";
 
 export const sessionsRouter = Router();
@@ -48,17 +48,10 @@ sessionsRouter.get("/sessions", async (req, res) => {
 });
 
 sessionsRouter.get("/sessions/:id", async (req, res) => {
-  const files = await listAllSessionFiles();
-  const matches = files.filter(f => f.path.endsWith(`/${req.params.id}.jsonl`));
-  if (matches.length === 0) return res.status(404).json({ error: "not found" });
-  // Newest copy across accounts is the representative.
-  let best = matches[0]; let bestM = 0;
-  for (const m of matches) {
-    let mt = 0; try { mt = (await (await import("node:fs/promises")).stat(m.path)).mtimeMs; } catch {}
-    if (mt >= bestM) { bestM = mt; best = m; }
-  }
-  const accounts = [...new Set(matches.map(m => m.account))].sort();
-  const meta = await readSessionMeta(best.path);
-  const detail = await readSessionDetail(best.path);
-  res.json({ meta: meta ? { ...meta, accounts } : meta, detail });
+  const deduped = await listDedupedSessions();
+  const d = deduped.find(x => x.id === req.params.id);
+  if (!d) return res.status(404).json({ error: "not found" });
+  const meta = await readSessionMeta(d.path);
+  const detail = await readSessionDetail(d.path);
+  res.json({ meta: meta ? { ...meta, accounts: d.accounts } : meta, detail });
 });
