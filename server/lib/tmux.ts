@@ -2,7 +2,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { encodeCwd, CLAUDE_PROJECTS_DIR } from "./pathEncoding.js";
+import { encodeCwd } from "./pathEncoding.js";
+import { loadAccounts } from "./accounts.js";
+import { accountForPanePid } from "./procEnviron.js";
 import { readSessionMeta } from "./jsonl.js";
 
 const pexec = promisify(execFile);
@@ -16,6 +18,8 @@ export interface TmuxPane {
   /** For claude panes: the most recent cwd tracked inside the conversation (from JSONL tail). */
   claudeLastCwd: string | null;
   claudeSessionId: string | null;
+  /** Authoritative account (from /proc environ) of the running claude, or null. */
+  claudeAccount: string | null;
   /** e.g. "bypassPermissions" — used by restore to re-launch with the same permission mode. */
   claudePermissionMode: string | null;
 }
@@ -46,10 +50,11 @@ export async function isTmuxRunning(): Promise<boolean> {
   }
 }
 
-async function resolveClaudeSessionId(cwd: string, cmd: string): Promise<string | null> {
+async function resolveClaudeSessionId(cwd: string, cmd: string, account: string | null): Promise<string | null> {
   if (cmd !== "claude") return null;
-  const enc = encodeCwd(cwd);
-  const proj = path.join(CLAUDE_PROJECTS_DIR, enc);
+  const acc = loadAccounts().find(a => a.name === account) ?? loadAccounts()[0];
+  if (!acc) return null;
+  const proj = path.join(acc.projectsDir, encodeCwd(cwd));
   let entries;
   try { entries = await fs.readdir(proj); } catch { return null; }
   const files: { name: string; mtime: number }[] = [];
@@ -84,12 +89,13 @@ export async function buildTmuxTree(): Promise<TmuxSession[]> {
       const panes: TmuxPane[] = [];
       for (const pline of panesRaw) {
         const [pidx, pid_, ppid, pcmd, pcwd] = pline.split("\t");
-        const claudeSessionId = await resolveClaudeSessionId(pcwd, pcmd);
+        const claudeAccount = pcmd === "claude" ? await accountForPanePid(Number(ppid)) : null;
+        const claudeSessionId = await resolveClaudeSessionId(pcwd, pcmd, claudeAccount);
         let claudeLastCwd: string | null = null;
         let claudePermissionMode: string | null = null;
         if (claudeSessionId) {
-          const proj = path.join(CLAUDE_PROJECTS_DIR, encodeCwd(pcwd));
-          const meta = await readSessionMeta(path.join(proj, `${claudeSessionId}.jsonl`));
+          const acc = loadAccounts().find(a => a.name === claudeAccount) ?? loadAccounts()[0];
+          const meta = await readSessionMeta(path.join(acc.projectsDir, encodeCwd(pcwd), `${claudeSessionId}.jsonl`));
           claudeLastCwd = meta?.lastCwd ?? null;
           claudePermissionMode = meta?.permissionMode ?? null;
         }
@@ -101,6 +107,7 @@ export async function buildTmuxTree(): Promise<TmuxSession[]> {
           cwd: pcwd,
           claudeLastCwd,
           claudeSessionId,
+          claudeAccount,
           claudePermissionMode,
         });
       }
@@ -117,16 +124,6 @@ export async function capturePane(paneId: string, lines = 500): Promise<string> 
   } catch (e: any) {
     return `(capture failed: ${e.message ?? e})`;
   }
-}
-
-export async function resumeClaudeInNewSession(sessionId: string, cwd: string, tmuxSessionName: string) {
-  // Create detached tmux session at cwd, running claude --resume <id>.
-  await pexec("tmux", [
-    "new-session", "-d",
-    "-s", tmuxSessionName,
-    "-c", cwd,
-    `claude --resume ${sessionId}`,
-  ]);
 }
 
 // Create an empty detached tmux session. Throws if a session with that name already exists.

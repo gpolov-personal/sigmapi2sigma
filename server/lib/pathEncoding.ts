@@ -8,4 +8,3 @@ import os from "node:os";
 import path from "node:path";
 
 export const DATA_DIR = path.join(os.homedir(), ".sigmapi2sigma");
-export const CLAUDE_PROJECTS_DIR = path.join(os.homedir(), ".claude");
