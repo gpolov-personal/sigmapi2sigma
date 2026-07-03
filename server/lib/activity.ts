@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DATA_DIR } from "./pathEncoding.js";
-import { listAllSessionFiles, readMessagesInRange, JsonlMessage } from "./jsonl.js";
+import { listDedupedSessions, readMessagesInRange, JsonlMessage } from "./jsonl.js";
 
 export interface CommandEntry {
   ts: string;
@@ -22,6 +22,7 @@ export interface ConversationActivity {
   allUserPrompts: { ts: string; preview: string }[];
   truncated: boolean;
   durationMinutes: number;
+  accounts: string[];
 }
 
 export interface ActivitySlice {
@@ -167,22 +168,18 @@ export async function computeActivitySlice(
 
   const cmdsP = loadCommandsInRange(fromIso, toIso, tmuxSet);
 
-  const allFiles = await listAllSessionFiles();
-  const fileBySid = new Map<string, string>();
-  for (const f of allFiles) {
-    const id = path.basename(f, ".jsonl");
-    fileBySid.set(id, f);
-  }
+  const deduped = await listDedupedSessions();
+  const bySid = new Map(deduped.map(d => [d.id, d]));
 
   const conversations: ConversationActivity[] = [];
   for (const sid of claudeSessionIds) {
-    const file = fileBySid.get(sid);
-    if (!file) {
+    const d = bySid.get(sid);
+    if (!d) {
       warnings.push(`session ${sid}: jsonl not found`);
       continue;
     }
-    const ca = await buildConversationActivity(file, sid, fromIso, toIso);
-    if (ca) conversations.push(ca);
+    const ca = await buildConversationActivity(d.path, sid, fromIso, toIso);
+    if (ca) conversations.push({ ...ca, accounts: d.accounts });
   }
 
   const { commands, installed } = await cmdsP;
