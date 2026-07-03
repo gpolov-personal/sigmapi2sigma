@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getJSON, postJSON, apiRequest, TmuxSession } from "../api";
 import { relativeTime } from "../utils";
+import { AccountBadge } from "../components/AccountBadge";
 
 interface SnapEntry { name: string; mtime: number; ts: string; sessions: TmuxSession[] }
 
@@ -71,11 +72,18 @@ export function Snapshots() {
             </div>
             <ul className="text-xs text-slate-300 space-y-0.5">
               {s.sessions.map(ss => {
+                const claudePanes = ss.windows.flatMap(w => w.panes).filter(p => p.claudeSessionId);
                 const nPanes = ss.windows.reduce((a, w) => a + w.panes.length, 0);
-                const nClaude = ss.windows.reduce((a, w) => a + w.panes.filter(p => p.claudeSessionId).length, 0);
+                const nClaude = claudePanes.length;
+                const accounts = [...new Set(
+                  claudePanes.map(p => p.claudeAccount).filter((a): a is string => !!a)
+                )].sort();
                 return (
-                  <li key={ss.name} className="truncate">
-                    <b>{ss.name}</b> · {ss.windows.length}w · {nPanes}p · {nClaude > 0 ? `${nClaude} claude` : "no claude"}
+                  <li key={ss.name} className="flex items-center gap-1.5">
+                    <span className="truncate">
+                      <b>{ss.name}</b> · {ss.windows.length}w · {nPanes}p · {nClaude > 0 ? `${nClaude} claude` : "no claude"}
+                    </span>
+                    {accounts.length > 0 && <AccountBadge accounts={accounts} />}
                   </li>
                 );
               })}
