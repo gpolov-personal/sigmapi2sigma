@@ -8,6 +8,8 @@
 #   1 — every attempted session failed (no progress)
 set -uo pipefail
 
+. "$(dirname "$0")/lib/accounts.sh"
+
 DATA_DIR="$HOME/.sigmapi2sigma"
 SNAP_DIR="$DATA_DIR/snapshots"
 
@@ -55,6 +57,7 @@ restore_one_session() {
   set -e
   local win_count w_idx w_name w_layout p_count first_cwd target_win
   local pi p_cwd claude_sid claude_mode p_idx cmd_str
+  local claude_account env_prefix acc_dir
 
   win_count=$(jq ".sessions[$si].windows | length" "$SNAP")
   for ((wi=0; wi<win_count; wi++)); do
@@ -85,16 +88,22 @@ restore_one_session() {
     for ((pi=0; pi<p_count; pi++)); do
       claude_sid=$(jq -r ".sessions[$si].windows[$wi].panes[$pi].claudeSessionId // empty" "$SNAP")
       claude_mode=$(jq -r ".sessions[$si].windows[$wi].panes[$pi].claudePermissionMode // empty" "$SNAP")
+      claude_account=$(jq -r ".sessions[$si].windows[$wi].panes[$pi].claudeAccount // empty" "$SNAP")
       p_idx=$(jq -r ".sessions[$si].windows[$wi].panes[$pi].index" "$SNAP")
       [[ -n "$claude_sid" ]] || continue
       case "$claude_mode" in
         acceptEdits|auto|bypassPermissions|default|dontAsk|plan) : ;;
         *) claude_mode="" ;;
       esac
+      env_prefix=""
+      if [[ -n "$claude_account" ]]; then
+        acc_dir=$(sp2s_load_accounts | awk -F'\t' -v n="$claude_account" '$1==n{print $2}') || true
+        [[ -n "$acc_dir" ]] && env_prefix="CLAUDE_CONFIG_DIR=$acc_dir "
+      fi
       if [[ -n "$claude_mode" && "$claude_mode" != "default" ]]; then
-        cmd_str="claude --permission-mode $claude_mode --resume $claude_sid"
+        cmd_str="${env_prefix}claude --permission-mode $claude_mode --resume $claude_sid"
       else
-        cmd_str="claude --resume $claude_sid"
+        cmd_str="${env_prefix}claude --resume $claude_sid"
       fi
       # Non-fatal: pane may not exist if layout differed or split-window was skipped.
       if ! run "tmux send-keys -t $(printf %q "$target_win.$p_idx") $(printf %q "$cmd_str") Enter" 2>/dev/null; then

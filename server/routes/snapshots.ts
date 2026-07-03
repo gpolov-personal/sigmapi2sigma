@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { DATA_DIR } from "../lib/pathEncoding.js";
 import { expandHome } from "../lib/paths.js";
+import { loadAccounts } from "../lib/accounts.js";
 
 const pexec = promisify(execFile);
 const REPO = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
@@ -81,22 +82,20 @@ snapshotsRouter.post("/restore", async (req, res) => {
 const VALID_PERM_MODES = new Set(["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]);
 
 snapshotsRouter.post("/resume", async (req, res) => {
-  const { sessionId, cwd, tmuxSessionName, permissionMode } = req.body ?? {};
+  const { sessionId, cwd, tmuxSessionName, permissionMode, account } = req.body ?? {};
   if (!sessionId || !cwd || !tmuxSessionName) {
     return res.status(400).json({ ok: false, error: "sessionId, cwd, tmuxSessionName required" });
   }
-  // Build the claude command, optionally with --permission-mode.
   const safeMode = permissionMode && VALID_PERM_MODES.has(permissionMode) && permissionMode !== "default"
-    ? permissionMode
-    : null;
+    ? permissionMode : null;
+  const acc = account ? loadAccounts().find(a => a.name === account) : null;
+  const envPrefix = acc ? `CLAUDE_CONFIG_DIR=${acc.configDir} ` : "";
   const claudeCmd = safeMode
-    ? `claude --permission-mode ${safeMode} --resume ${sessionId}`
-    : `claude --resume ${sessionId}`;
+    ? `${envPrefix}claude --permission-mode ${safeMode} --resume ${sessionId}`
+    : `${envPrefix}claude --resume ${sessionId}`;
   try {
     await pexec("tmux", [
-      "new-session", "-d",
-      "-s", tmuxSessionName,
-      "-c", expandHome(cwd),
+      "new-session", "-d", "-s", tmuxSessionName, "-c", expandHome(cwd),
       claudeCmd,
     ]);
     res.json({ ok: true });
