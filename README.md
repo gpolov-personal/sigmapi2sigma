@@ -106,6 +106,7 @@ The full rclone walkthrough — including the WSL2 OAuth gotcha — is in the tr
 ├── assignments.json                 tmux session name ↔ project id
 ├── pomodoros.json                   raw timestamped pomodoro records
 ├── settings.json                    workday hours, beep sounds, durations
+├── accounts.json                    optional: which Claude config dir(s) to read (see below)
 ├── snapshots/{latest,prev*}.json    rotated tmux snapshots (every 5 min)
 ├── shell-history/YYYY-MM-DD.jsonl   per-day shell command log (60-day retention)
 ├── backups/sigmapi2sigma-*.tar.gz   periodic backups (rotated)
@@ -115,6 +116,25 @@ The full rclone walkthrough — including the WSL2 OAuth gotcha — is in the tr
 ```
 
 The repo itself contains only code — your data is yours, lives outside the repo, and travels via backup files.
+
+### Multi-account Claude config (`accounts.json`)
+
+Tells sigmapi2sigma which Claude config dir(s) — `CLAUDE_CONFIG_DIR` — to read conversation logs from, and what to badge each one as in the UI.
+
+```json
+{
+  "accounts": [
+    { "name": "P", "path": "~/.claude-personal" },
+    { "name": "W", "path": "~/.claude-work" }
+  ]
+}
+```
+
+`~` expands to `$HOME`. `path` is the Claude config dir; conversations live at `path/projects/`.
+
+If the file is absent, sigmapi2sigma falls back to a single `default` account at `~/.claude` — zero-config, works out of the box on a machine with only one Claude account. If the file is present but a listed `path` doesn't exist, the server refuses to start.
+
+A conversation shared across accounts (same UUID logged under multiple config dirs) shows up once in the Sessions list, badged with every account it appears under. Resuming a multi-account session prompts which account to launch under, setting `CLAUDE_CONFIG_DIR` accordingly.
 
 ---
 
