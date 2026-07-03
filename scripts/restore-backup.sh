@@ -18,8 +18,8 @@ if [ -z "$BUNDLE" ] || [ ! -f "$BUNDLE" ]; then
 fi
 
 DATA_DIR="$HOME/.sigmapi2sigma"
-CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$(dirname "$0")/lib/accounts.sh"
 
 echo "Restoring from: $BUNDLE"
 
@@ -90,16 +90,34 @@ fi
 
 # Claude conversations: copy any included files (don't wipe other projects/sessions).
 if [ -d "$TMP/claude-conversations" ] && [ "$NO_CONVERSATIONS" -eq 0 ]; then
-  mkdir -p "$CLAUDE_PROJECTS_DIR"
   count=0
+  # Build a name→projectsDir map from current config.
+  declare -A ACC_DIR
+  while IFS=$'\t' read -r acct pdir; do ACC_DIR["$acct"]="$pdir/projects"; done < <(sp2s_load_accounts)
+  for adir in "$TMP/claude-conversations"/*/; do
+    [ -d "$adir" ] || continue
+    acct="$(basename "$adir")"
+    target="${ACC_DIR[$acct]:-}"
+    if [ -z "$target" ]; then
+      echo "warn: backup contains account '$acct' not in current accounts.json — skipping" >&2
+      continue
+    fi
+    mkdir -p "$target"
+    while IFS= read -r -d '' src; do
+      rel="${src#$adir}"
+      dest="$target/$rel"
+      mkdir -p "$(dirname "$dest")"
+      atomic_swap "$src" "$dest"
+      count=$((count + 1))
+    done < <(find "$adir" -type f -name "*.jsonl" -print0)
+  done
+  # Legacy flat backups (pre-account): files directly under claude-conversations/<encoded-cwd>/…
+  legacy_target="$HOME/.claude/projects"
   while IFS= read -r -d '' src; do
     rel="${src#$TMP/claude-conversations/}"
-    dest="$CLAUDE_PROJECTS_DIR/$rel"
-    mkdir -p "$(dirname "$dest")"
-    atomic_swap "$src" "$dest"
-    count=$((count + 1))
-  done < <(find "$TMP/claude-conversations" -type f -name "*.jsonl" -print0)
-  [ $count -gt 0 ] && echo "restored $count claude-conversation file(s)"
+    case "$rel" in */*/*) : ;; *) continue ;; esac   # skip; per-account handled above
+  done < <(find "$TMP/claude-conversations" -maxdepth 2 -type f -name "*.jsonl" -print0)
+  [ $count -gt 0 ] && echo "restored $count claude-conversation file(s) across accounts"
 fi
 
 echo "Restore complete. Restart the dev server (npm run stop && npm run dev) to pick up changes."
