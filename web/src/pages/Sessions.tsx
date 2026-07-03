@@ -4,6 +4,7 @@ import { getJSON, SessionMeta, postJSON, apiRequest } from "../api";
 import { relativeTime, trunc, copy } from "../utils";
 import { useProjects } from "../ProjectsContext";
 import { ProjectChip } from "../components/ProjectChip";
+import { AccountBadge } from "../components/AccountBadge";
 
 const HOURS_OPTIONS = [1, 6, 24, 72, 168, 0];
 
@@ -65,6 +66,16 @@ export function Sessions() {
     );
   }, [sessions, filter]);
 
+  const allAccounts = useMemo(
+    () => [...new Set(sessions.flatMap(s => s.accounts))].sort(),
+    [sessions]
+  );
+  const [accountFilter, setAccountFilter] = useState<string | null>(null);
+  const visibleSessions = useMemo(
+    () => accountFilter ? filtered.filter(s => s.accounts.includes(accountFilter)) : filtered,
+    [filtered, accountFilter]
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -90,10 +101,22 @@ export function Sessions() {
         >
           {loading ? "..." : "Refresh"}
         </button>
-        <span className="text-sm text-slate-500">{filtered.length} sessions</span>
+        <span className="text-sm text-slate-500">{visibleSessions.length} sessions</span>
       </div>
 
       <AnchorLine anchor={anchor} hours={hours} />
+
+      {allAccounts.length > 1 && (
+        <div className="flex gap-1 items-center text-xs -mt-2">
+          <span className="text-slate-500">account:</span>
+          <button onClick={() => setAccountFilter(null)}
+            className={`px-2 py-0.5 rounded ${accountFilter === null ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400"}`}>all</button>
+          {allAccounts.map(a => (
+            <button key={a} onClick={() => setAccountFilter(a)}
+              className={`px-2 py-0.5 rounded ${accountFilter === a ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400"}`}>{a}</button>
+          ))}
+        </div>
+      )}
 
       <div className="border border-slate-800 rounded overflow-hidden">
         <table className="w-full text-sm">
@@ -108,7 +131,7 @@ export function Sessions() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(s => {
+            {visibleSessions.map(s => {
               const liveLocs = s.id ? liveById.get(s.id) : undefined;
               return (
                 <tr
@@ -121,7 +144,10 @@ export function Sessions() {
                           title={liveLocs && liveLocs.length > 1 ? `Running in ${liveLocs.length} panes simultaneously` : ""}/>
                   </td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-300">
-                    <CwdCell launchCwd={s.cwd} currentCwd={s.lastCwd} fallback={s.projectDir} />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CwdCell launchCwd={s.cwd} currentCwd={s.lastCwd} fallback={s.projectDir} />
+                      <AccountBadge accounts={s.accounts} />
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-slate-400">{s.gitBranch ?? ""}</td>
                   <td className="px-3 py-2 text-slate-400 whitespace-nowrap">{relativeTime(s.mtime)}</td>
@@ -160,7 +186,7 @@ export function Sessions() {
                 </tr>
               );
             })}
-            {filtered.length === 0 && (
+            {visibleSessions.length === 0 && (
               <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">No sessions.</td></tr>
             )}
           </tbody>
@@ -288,7 +314,10 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
         <div className="flex justify-between items-start">
           <div>
             <div className="text-xs text-slate-500 mb-1">Session ID</div>
-            <div className="font-mono text-sm">{session.id}</div>
+            <div className="font-mono text-sm flex items-center gap-2">
+              {session.id}
+              <AccountBadge accounts={session.accounts} />
+            </div>
           </div>
           <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
         </div>

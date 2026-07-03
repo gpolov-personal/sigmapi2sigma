@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getJSON, getText, postJSON, TmuxResponse, TmuxPane, TmuxWindow, TmuxSession, ShellEntry, SavedTmuxFile } from "../api";
 import { copy, relativeTime, trunc } from "../utils";
 import { ProjectAssignmentMenu } from "../components/ProjectAssignmentMenu";
+import { AccountBadge } from "../components/AccountBadge";
 import { BrainCircuit } from "lucide-react";
 
 // Persisted fold state — keys are namespaced so section/saved/live can coexist.
@@ -658,10 +659,15 @@ function PaneCard({ pane, state, lwdConflict, onCapture, onCommands }:
           {badge}
         </div>
       </div>
-      {isClaude && pane.claudeSessionId && (
-        <div className="mb-2 text-xs">
-          <span className="text-cyan-400/70">session </span>
-          <span className="font-mono text-cyan-200">{pane.claudeSessionId.slice(0, 12)}…</span>
+      {isClaude && (pane.claudeSessionId || pane.claudeAccount) && (
+        <div className="mb-2 text-xs flex items-center gap-2 flex-wrap">
+          {pane.claudeSessionId && (
+            <span>
+              <span className="text-cyan-400/70">session </span>
+              <span className="font-mono text-cyan-200">{pane.claudeSessionId.slice(0, 12)}…</span>
+            </span>
+          )}
+          {pane.cmd === "claude" && pane.claudeAccount && <AccountBadge accounts={[pane.claudeAccount]} />}
         </div>
       )}
       <PaneCwd pane={pane} />
