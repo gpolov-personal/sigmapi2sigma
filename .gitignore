@@ -25,3 +25,6 @@ Thumbs.db
 
 # Local worktrees for parallel feature development
 .worktrees/
+
+# subagent-driven-development scratch
+.superpowers/
