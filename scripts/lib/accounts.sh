@@ -10,16 +10,22 @@ sp2s_load_accounts() {
   fi
   local json
   json=$(cat "$cfg") || { echo "accounts.sh: cannot read $cfg" >&2; return 1; }
-  echo "$json" | jq -e '.accounts | type=="array" and length>0' >/dev/null 2>&1 \
+  printf '%s' "$json" | jq -e '.accounts | type=="array" and length>0' >/dev/null 2>&1 \
     || { echo "accounts.sh: $cfg has no non-empty 'accounts' array" >&2; return 1; }
+  # Use a non-whitespace field separator (U+001F, unit separator) rather than
+  # tab: with IFS made only of "IFS whitespace" chars (space/tab/newline),
+  # `read` strips leading/trailing empty fields, silently shifting path into
+  # name when name is missing. A non-whitespace IFS char preserves empties.
   local names="" name pth
-  while IFS=$'\t' read -r name pth; do
+  while IFS=$'\x1f' read -r name pth; do
+    [[ -n "$name" ]] || { echo "accounts.sh: every account needs a non-empty 'name'" >&2; return 1; }
+    [[ -n "$pth" ]] || { echo "accounts.sh: account '$name' needs a non-empty 'path'" >&2; return 1; }
     pth="${pth/#\~/$HOME}"
     [[ -d "$pth" ]] || { echo "accounts.sh: account '$name' path does not exist: $pth" >&2; return 1; }
     case " $names " in *" $name "*) echo "accounts.sh: duplicate account name '$name'" >&2; return 1;; esac
     names="$names $name"
     printf '%s\t%s\n' "$name" "$pth"
-  done < <(echo "$json" | jq -r '.accounts[] | [.name, .path] | @tsv')
+  done < <(printf '%s' "$json" | jq -r '.accounts[] | [(.name // ""), (.path // "")] | join("")')
 }
 
 # Descend the process tree from $1 to find a process named "claude". Echoes its pid or "".
@@ -28,7 +34,7 @@ sp2s_find_claude_pid() {
   while ((${#queue[@]})); do
     pid="${queue[0]}"; queue=("${queue[@]:1}")
     [[ "$(cat "/proc/$pid/comm" 2>/dev/null)" == "claude" ]] && { echo "$pid"; return 0; }
-    children=$(cat "/proc/$pid/task/$pid/children" 2>/dev/null)
+    children=$(cat "/proc/$pid/task/$pid/children" 2>/dev/null) || true
     for c in $children; do queue+=("$c"); done
   done
   echo ""
@@ -39,7 +45,7 @@ sp2s_account_for_pid() {
   local root="$1" cpid ccd
   cpid=$(sp2s_find_claude_pid "$root")
   [[ -n "$cpid" ]] || { echo ""; return 0; }
-  ccd=$(tr '\0' '\n' < "/proc/$cpid/environ" 2>/dev/null | sed -n 's/^CLAUDE_CONFIG_DIR=//p' | head -1)
+  ccd=$(cat "/proc/$cpid/environ" 2>/dev/null | tr '\0' '\n' | sed -n 's/^CLAUDE_CONFIG_DIR=//p' | head -1) || true
   [[ -n "$ccd" ]] || ccd="$HOME/.claude"   # plain `claude` → default account
   # Map configDir → name.
   local name pth
