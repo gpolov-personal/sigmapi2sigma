@@ -16,7 +16,8 @@
     "snapshot": "bash scripts/snapshot.sh",
     "restore": "bash scripts/restore.sh",
     "backup": "bash scripts/backup.sh",
-    "restore-backup": "bash scripts/restore-backup.sh"
+    "restore-backup": "bash scripts/restore-backup.sh",
+    "test": "node --import tsx --test server/lib/*.test.ts"
   },
   "dependencies": {
     "express": "^4.21.2",
