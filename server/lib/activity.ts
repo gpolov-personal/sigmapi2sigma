@@ -153,6 +153,7 @@ async function buildConversationActivity(
     allUserPrompts: userPrompts,
     truncated: userPromptCount > MAX_PROMPTS,
     durationMinutes,
+    accounts: [],
   };
 }
 
