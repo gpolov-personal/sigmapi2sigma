@@ -52,7 +52,8 @@ export async function isTmuxRunning(): Promise<boolean> {
 
 async function resolveClaudeSessionId(cwd: string, cmd: string, account: string | null): Promise<string | null> {
   if (cmd !== "claude") return null;
-  const acc = loadAccounts().find(a => a.name === account) ?? loadAccounts()[0];
+  if (!account) return null;
+  const acc = loadAccounts().find(a => a.name === account);
   if (!acc) return null;
   const proj = path.join(acc.projectsDir, encodeCwd(cwd));
   let entries;
@@ -94,10 +95,12 @@ export async function buildTmuxTree(): Promise<TmuxSession[]> {
         let claudeLastCwd: string | null = null;
         let claudePermissionMode: string | null = null;
         if (claudeSessionId) {
-          const acc = loadAccounts().find(a => a.name === claudeAccount) ?? loadAccounts()[0];
-          const meta = await readSessionMeta(path.join(acc.projectsDir, encodeCwd(pcwd), `${claudeSessionId}.jsonl`));
-          claudeLastCwd = meta?.lastCwd ?? null;
-          claudePermissionMode = meta?.permissionMode ?? null;
+          const acc = loadAccounts().find(a => a.name === claudeAccount);
+          if (acc) {
+            const meta = await readSessionMeta(path.join(acc.projectsDir, encodeCwd(pcwd), `${claudeSessionId}.jsonl`));
+            claudeLastCwd = meta?.lastCwd ?? null;
+            claudePermissionMode = meta?.permissionMode ?? null;
+          }
         }
         panes.push({
           index: Number(pidx),

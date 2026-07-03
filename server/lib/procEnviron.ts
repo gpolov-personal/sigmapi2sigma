@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import { accountForConfigDir } from "./accounts.js";
 
 async function findClaudePid(root: number): Promise<number | null> {
@@ -27,6 +28,6 @@ export async function accountForPanePid(panePid: number): Promise<string | null>
   let environ: string;
   try { environ = await fs.readFile(`/proc/${cpid}/environ`, "utf8"); } catch { return null; }
   const m = environ.split("\0").find(kv => kv.startsWith("CLAUDE_CONFIG_DIR="));
-  const dir = m ? m.slice("CLAUDE_CONFIG_DIR=".length) : `${process.env.HOME}/.claude`;
+  const dir = m ? m.slice("CLAUDE_CONFIG_DIR=".length) : `${os.homedir()}/.claude`;
   return accountForConfigDir(dir);
 }
