@@ -5,12 +5,15 @@
 #   - Core JSONs:        projects, tasks, assignments, pomodoros, settings
 #   - Tmux state:        saved-tmux.json, tmux-bindings.jsonl, snapshots/
 #   - Shell history:     last 3 days of shell-history/*.jsonl
-#   - Claude sessions:   ~/.claude/projects/<encoded-cwd>/*.jsonl modified in last 28 days
-#                        (ALL projects, not just this one) — staged under claude-conversations/
+#   - Claude sessions:   <account-configDir>/projects/<encoded-cwd>/*.jsonl modified in last
+#                        28 days, for every account in accounts.json (ALL projects, not just
+#                        this one) — staged under claude-conversations/<account>/
 #
 # Skips if no source has changed since the last bundle (use --force to override).
 # Mirrors to BACKUP_REMOTE (rclone) if configured in ~/.sigmapi2sigma/backup-config.
 set -euo pipefail
+
+. "$(dirname "$0")/lib/accounts.sh"
 
 # Ensure node is on PATH — cron's default PATH typically doesn't include nvm,
 # and we use node for the retention pruner below.
@@ -29,7 +32,6 @@ fi
 DATA_DIR="$HOME/.sigmapi2sigma"
 BACKUP_DIR="$DATA_DIR/backups"
 CONFIG="$DATA_DIR/backup-config"
-CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
 LOG="$BACKUP_DIR/backup.log"
 
 mkdir -p "$BACKUP_DIR"
@@ -65,14 +67,14 @@ if [ -d "$DATA_DIR/shell-history" ]; then
   done
 fi
 
-# Last 28 days of Claude conversations across ALL projects.
-CLAUDE_FILES=()
-if [ -d "$CLAUDE_PROJECTS_DIR" ]; then
+# Last 28 days of Claude conversations across ALL projects, all accounts.
+while IFS=$'\t' read -r acct pdir; do
+  proj="$pdir/projects"
+  [ -d "$proj" ] || continue
   while IFS= read -r -d '' f; do
-    CLAUDE_FILES+=("$f")
     SOURCES+=("$f")
-  done < <(find "$CLAUDE_PROJECTS_DIR" -type f -name "*.jsonl" -mtime -28 -print0)
-fi
+  done < <(find "$proj" -type f -name "*.jsonl" -mtime -28 -print0 2>/dev/null)
+done < <(sp2s_load_accounts)
 
 if [ ${#SOURCES[@]} -eq 0 ]; then
   echo "Nothing to back up yet (no source files found)."
@@ -127,16 +129,19 @@ if [ ${#SHELL_DAYS[@]} -gt 0 ]; then
   done
 fi
 
-# Claude conversations (last 7 days, all projects), preserving the <encoded-cwd>/<uuid>.jsonl layout.
-if [ ${#CLAUDE_FILES[@]} -gt 0 ]; then
-  mkdir -p "$STAGE/claude-conversations"
-  for src in "${CLAUDE_FILES[@]}"; do
-    rel="${src#$CLAUDE_PROJECTS_DIR/}"
-    dest="$STAGE/claude-conversations/$rel"
+# Claude conversations (last 28 days, all projects, all accounts),
+# foldered by account: claude-conversations/<account>/<encoded-cwd>/<uuid>.jsonl
+mkdir -p "$STAGE/claude-conversations"
+while IFS=$'\t' read -r acct pdir; do
+  proj="$pdir/projects"
+  [[ -d "$proj" ]] || continue
+  while IFS= read -r -d '' src; do
+    rel="${src#$proj/}"
+    dest="$STAGE/claude-conversations/$acct/$rel"
     mkdir -p "$(dirname "$dest")"
     ln "$src" "$dest" 2>/dev/null || cp "$src" "$dest"
-  done
-fi
+  done < <(find "$proj" -type f -name "*.jsonl" -mtime -28 -print0 2>/dev/null)
+done < <(sp2s_load_accounts)
 
 # Build the bundle.
 tar -C "$STAGE" -czf "$BUNDLE" .
