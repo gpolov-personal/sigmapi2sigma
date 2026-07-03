@@ -278,13 +278,23 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
     })();
     return () => { cancelled = true; };
   }, [session.id]);
-  const resumeCmd = `claude --resume ${session.id}`;
+  const [resumeAccount, setResumeAccount] = useState<string | null>(
+    session.accounts.length === 1 ? session.accounts[0] : null
+  );
+  const chosenAccount = resumeAccount ?? (session.accounts.length === 1 ? session.accounts[0] : null);
+  const resumeCmd = chosenAccount && chosenAccount !== "default"
+    ? `CLAUDE_CONFIG_DIR="$(jq -r '.accounts[]|select(.name=="${chosenAccount}").path' ~/.sigmapi2sigma/accounts.json)" claude --resume ${session.id}`
+    : `claude --resume ${session.id}`;
 
   // Always launch at LWD: `claude --resume <uuid>` only finds the JSONL when run
   // from the same project dir the session was originally launched in.
   const resumeCwd = session.cwd;
 
   async function resumeInTmux() {
+    if (session.accounts.length > 1 && !resumeAccount) {
+      setResumeMsg("Pick an account to resume under.");
+      return;
+    }
     setResuming(true);
     setResumeMsg(null);
     try {
@@ -293,6 +303,7 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
         cwd: resumeCwd,
         tmuxSessionName: tmuxName,
         permissionMode: session.permissionMode ?? undefined,
+        account: resumeAccount ?? session.accounts[0],
       });
       const flag = session.permissionMode && session.permissionMode !== "default"
         ? ` (--permission-mode ${session.permissionMode})`
@@ -398,6 +409,15 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
                 ? `No snapshot record of this session — using cwd basename as default.`
                 : `No snapshot record — using session id as default.`}
           </div>
+          {session.accounts.length > 1 && (
+            <div className="flex gap-1 items-center text-xs">
+              <span className="text-slate-500">resume under:</span>
+              {session.accounts.map(a => (
+                <button key={a} onClick={() => setResumeAccount(a)}
+                  className={`px-2 py-0.5 rounded ${resumeAccount === a ? "bg-emerald-700 text-white" : "bg-slate-800 text-slate-400"}`}>{a}</button>
+              ))}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               onClick={() => copy(resumeCmd)}
