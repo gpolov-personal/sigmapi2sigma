@@ -89,7 +89,7 @@ snapshotsRouter.post("/resume", async (req, res) => {
   const safeMode = permissionMode && VALID_PERM_MODES.has(permissionMode) && permissionMode !== "default"
     ? permissionMode : null;
   const acc = account ? loadAccounts().find(a => a.name === account) : null;
-  const envPrefix = acc ? `CLAUDE_CONFIG_DIR=${acc.configDir} ` : "";
+  const envPrefix = acc ? `CLAUDE_CONFIG_DIR=${JSON.stringify(acc.configDir)} ` : "";
   const claudeCmd = safeMode
     ? `${envPrefix}claude --permission-mode ${safeMode} --resume ${sessionId}`
     : `${envPrefix}claude --resume ${sessionId}`;

@@ -5,6 +5,8 @@ set -euo pipefail
 
 . "$(dirname "$0")/lib/accounts.sh"
 
+ACCOUNTS_TSV="$(sp2s_load_accounts)" || { echo "FATAL: invalid ~/.sigmapi2sigma/accounts.json (see message above)" >&2; exit 1; }
+
 DATA_DIR="$HOME/.sigmapi2sigma"
 SNAP_DIR="$DATA_DIR/snapshots"
 
@@ -24,7 +26,7 @@ resolve_claude_session() {
   [[ "$cmd" == "claude" ]] || { echo ""; return 0; }
   [[ -n "$acct" ]] || { echo ""; return 0; }
   local pdir enc proj newest
-  pdir=$(sp2s_load_accounts | awk -F'\t' -v n="$acct" '$1==n{print $2}')
+  pdir=$(awk -F'\t' -v n="$acct" '$1==n{print $2}' <<< "$ACCOUNTS_TSV")
   [[ -n "$pdir" ]] || { echo ""; return 0; }
   enc=$(encode_cwd "$cwd")
   proj="$pdir/projects/$enc"
@@ -44,7 +46,7 @@ resolve_claude_last_cwd() {
   [[ -n "$sid" ]] || { echo ""; return 0; }
   [[ -n "$acct" ]] || { echo ""; return 0; }
   local pdir enc file
-  pdir=$(sp2s_load_accounts | awk -F'\t' -v n="$acct" '$1==n{print $2}')
+  pdir=$(awk -F'\t' -v n="$acct" '$1==n{print $2}' <<< "$ACCOUNTS_TSV")
   [[ -n "$pdir" ]] || { echo ""; return 0; }
   enc=$(encode_cwd "$cwd")
   file="$pdir/projects/$enc/$sid.jsonl"
@@ -60,7 +62,7 @@ resolve_claude_permission_mode() {
   [[ -n "$sid" ]] || { echo ""; return 0; }
   [[ -n "$acct" ]] || { echo ""; return 0; }
   local pdir enc file
-  pdir=$(sp2s_load_accounts | awk -F'\t' -v n="$acct" '$1==n{print $2}')
+  pdir=$(awk -F'\t' -v n="$acct" '$1==n{print $2}' <<< "$ACCOUNTS_TSV")
   [[ -n "$pdir" ]] || { echo ""; return 0; }
   enc=$(encode_cwd "$cwd")
   file="$pdir/projects/$enc/$sid.jsonl"

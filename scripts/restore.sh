@@ -10,6 +10,8 @@ set -uo pipefail
 
 . "$(dirname "$0")/lib/accounts.sh"
 
+ACCOUNTS_TSV="$(sp2s_load_accounts)" || { echo "FATAL: invalid ~/.sigmapi2sigma/accounts.json (see message above)" >&2; exit 1; }
+
 DATA_DIR="$HOME/.sigmapi2sigma"
 SNAP_DIR="$DATA_DIR/snapshots"
 
@@ -97,7 +99,7 @@ restore_one_session() {
       esac
       env_prefix=""
       if [[ -n "$claude_account" ]]; then
-        acc_dir=$(sp2s_load_accounts | awk -F'\t' -v n="$claude_account" '$1==n{print $2}') || true
+        acc_dir=$(awk -F'\t' -v n="$claude_account" '$1==n{print $2}' <<< "$ACCOUNTS_TSV") || true
         [[ -n "$acc_dir" ]] && env_prefix="CLAUDE_CONFIG_DIR=$acc_dir "
       fi
       if [[ -n "$claude_mode" && "$claude_mode" != "default" ]]; then

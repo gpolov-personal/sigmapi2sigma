@@ -21,6 +21,8 @@ DATA_DIR="$HOME/.sigmapi2sigma"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$(dirname "$0")/lib/accounts.sh"
 
+ACCOUNTS_TSV="$(sp2s_load_accounts)" || { echo "FATAL: invalid ~/.sigmapi2sigma/accounts.json (see message above)" >&2; exit 1; }
+
 echo "Restoring from: $BUNDLE"
 
 # Validate the bundle: must contain at least projects.json.
@@ -99,7 +101,7 @@ if [ -d "$TMP/claude-conversations" ] && [ "$NO_CONVERSATIONS" -eq 0 ]; then
   legacy_count=0
   # Build a name→projectsDir map from current config.
   declare -A ACC_DIR
-  while IFS=$'\t' read -r acct pdir; do ACC_DIR["$acct"]="$pdir/projects"; done < <(sp2s_load_accounts)
+  while IFS=$'\t' read -r acct pdir; do ACC_DIR["$acct"]="$pdir/projects"; done <<< "$ACCOUNTS_TSV"
   for adir in "$TMP/claude-conversations"/*/; do
     [ -d "$adir" ] || continue
     name="$(basename "$adir")"

@@ -15,6 +15,8 @@ set -euo pipefail
 
 . "$(dirname "$0")/lib/accounts.sh"
 
+ACCOUNTS_TSV="$(sp2s_load_accounts)" || { echo "FATAL: invalid ~/.sigmapi2sigma/accounts.json (see message above)" >&2; exit 1; }
+
 # Ensure node is on PATH — cron's default PATH typically doesn't include nvm,
 # and we use node for the retention pruner below.
 if ! command -v node >/dev/null 2>&1; then
@@ -74,7 +76,7 @@ while IFS=$'\t' read -r acct pdir; do
   while IFS= read -r -d '' f; do
     SOURCES+=("$f")
   done < <(find "$proj" -type f -name "*.jsonl" -mtime -28 -print0 2>/dev/null)
-done < <(sp2s_load_accounts)
+done <<< "$ACCOUNTS_TSV"
 
 if [ ${#SOURCES[@]} -eq 0 ]; then
   echo "Nothing to back up yet (no source files found)."
@@ -141,7 +143,7 @@ while IFS=$'\t' read -r acct pdir; do
     mkdir -p "$(dirname "$dest")"
     ln "$src" "$dest" 2>/dev/null || cp "$src" "$dest"
   done < <(find "$proj" -type f -name "*.jsonl" -mtime -28 -print0 2>/dev/null)
-done < <(sp2s_load_accounts)
+done <<< "$ACCOUNTS_TSV"
 
 # Build the bundle.
 tar -C "$STAGE" -czf "$BUNDLE" .
