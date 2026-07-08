@@ -1,5 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, X, AlarmClock, Coffee, Play, Pause } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { Plus, X, AlarmClock, Coffee, Play, Pause, ChevronDown } from "lucide-react";
 import { Pomodoro, Project, Task, apiRequest, FREE_PROJECT_ID } from "../api";
 import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
@@ -32,36 +32,118 @@ interface NextPomodoroProposal {
 
 // Add/remove list of Free-project slot inputs. Holds raw values (may include empty rows
 // while editing); the caller cleans them before persisting. Renders at least one row.
-function FreeSlotsEditor({ labels, onChange, color, placeholder }: {
+// `suggestions` are recently-used labels (most-recent first). The fold auto-opens filtered
+// as you type; the left ▾ button opens the full list. Keyboard: ↓/↑ move, Enter picks,
+// Esc closes.
+function FreeSlotsEditor({ labels, onChange, color, placeholder, suggestions = [] }: {
   labels: string[];
   onChange: (next: string[]) => void;
   color?: string;
   placeholder?: string;
+  suggestions?: string[];
 }) {
+  const [open, setOpen] = useState<{ row: number; mode: "all" | "filtered" } | null>(null);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const rows = labels.length > 0 ? labels : [""];
+
   const setAt = (i: number, v: string) => { const next = rows.slice(); next[i] = v; onChange(next); };
-  const removeAt = (i: number) => { const next = rows.slice(); next.splice(i, 1); onChange(next); };
+  const removeAt = (i: number) => { const next = rows.slice(); next.splice(i, 1); onChange(next); setOpen(null); };
+  const pick = (i: number, v: string) => { const next = rows.slice(); next[i] = v; onChange(next); setOpen(null); setActiveIndex(-1); };
+
+  const optionsFor = (i: number, mode: "all" | "filtered") => {
+    if (mode === "all") return suggestions;
+    const q = (rows[i] ?? "").trim().toLowerCase();
+    return q ? suggestions.filter(s => s.toLowerCase().includes(q)) : suggestions;
+  };
+
+  // Typing auto-opens the filtered fold (and closes it when the field is emptied).
+  const onType = (i: number, v: string) => {
+    setAt(i, v);
+    setActiveIndex(-1);
+    if (suggestions.length === 0) { setOpen(null); return; }
+    setOpen(v.trim().length > 0 ? { row: i, mode: "filtered" } : null);
+  };
+
+  // ▾ toggles the full (unfiltered) list.
+  const toggleArrow = (i: number) => {
+    setActiveIndex(-1);
+    setOpen(prev => (prev && prev.row === i && prev.mode === "all") ? null : { row: i, mode: "all" });
+  };
+
+  const onKey = (i: number, e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (suggestions.length === 0) return;
+    const cur = open && open.row === i ? open : null;
+    const opts = cur ? optionsFor(i, cur.mode) : [];
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (!cur) {
+        setOpen({ row: i, mode: (rows[i] ?? "").trim() ? "filtered" : "all" });
+        setActiveIndex(0);
+      } else {
+        setActiveIndex(a => Math.min(a + 1, opts.length - 1));
+      }
+    } else if (e.key === "ArrowUp") {
+      if (!cur) return;
+      e.preventDefault();
+      setActiveIndex(a => Math.max(a - 1, 0));
+    } else if (e.key === "Enter") {
+      if (cur && activeIndex >= 0 && activeIndex < opts.length) {
+        e.preventDefault();
+        pick(i, opts[activeIndex]);
+      }
+    } else if (e.key === "Escape") {
+      setOpen(null);
+      setActiveIndex(-1);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
         <span className="text-xs" style={{ color: color ?? "#64748b" }}>Free:</span>
         {rows.length > 1 && <span className="text-[10px] text-slate-500">one time-unit per slot</span>}
       </div>
-      {rows.map((label, i) => (
-        <div key={i} className="flex items-center gap-1">
-          <input
-            value={label}
-            onChange={e => setAt(i, e.target.value)}
-            placeholder={placeholder ?? "What are you working on?"}
-            maxLength={200}
-            className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
-          />
-          {rows.length > 1 && (
-            <button type="button" onClick={() => removeAt(i)} title="Remove slot"
-              className="text-slate-500 hover:text-red-400 px-1"><X size={12} /></button>
-          )}
-        </div>
-      ))}
+      {rows.map((label, i) => {
+        const cur = open && open.row === i ? open : null;
+        const opts = cur ? optionsFor(i, cur.mode) : [];
+        return (
+          <div key={i} className="relative flex items-center gap-1"
+            onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) { setOpen(null); setActiveIndex(-1); } }}
+          >
+            {suggestions.length > 0 && (
+              <button type="button" title="Show recent labels" aria-label="Show recent labels"
+                onClick={() => toggleArrow(i)}
+                className="text-slate-400 hover:text-white px-0.5 shrink-0"><ChevronDown size={12} /></button>
+            )}
+            <input
+              value={label}
+              onChange={e => onType(i, e.target.value)}
+              onKeyDown={e => onKey(i, e)}
+              placeholder={placeholder ?? "What are you working on?"}
+              maxLength={200}
+              className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
+            />
+            {rows.length > 1 && (
+              <button type="button" onClick={() => removeAt(i)} title="Remove slot"
+                className="text-slate-500 hover:text-red-400 px-1 shrink-0"><X size={12} /></button>
+            )}
+            {cur && (
+              <div className="absolute z-30 top-full left-5 mt-1 w-72 max-h-48 overflow-y-auto bg-slate-800 border border-slate-700 rounded shadow-lg">
+                {opts.length === 0 ? (
+                  <div className="px-2 py-1 text-[11px] text-slate-500 italic">No matching recent labels</div>
+                ) : opts.map((s, j) => (
+                  <button key={j} type="button"
+                    ref={el => { if (j === activeIndex) el?.scrollIntoView({ block: "nearest" }); }}
+                    onClick={() => pick(i, s)}
+                    onMouseEnter={() => setActiveIndex(j)}
+                    className={`block w-full text-left px-2 py-1 text-[11px] truncate ${j === activeIndex ? "bg-slate-700 text-white" : "text-slate-200 hover:bg-slate-700"}`}
+                  >{s}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
       {rows.length < MAX_FREE_SLOTS && (
         <button type="button" onClick={() => onChange([...rows, ""])}
           className="self-start text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1">
@@ -354,6 +436,24 @@ export function PomodoroPage() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [todayPoms, taskById]);
 
+  // Last 20 distinct Free-slot labels, most-recent first — offered as reuse suggestions.
+  // Derived from logged pomodoros (server returns them newest-first; sort defensively).
+  const freeLabelSuggestions = useMemo(() => {
+    const ordered = [...pomodoros].sort((a, b) => b.started_at.localeCompare(a.started_at));
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const p of ordered) {
+      for (const label of p.freeTaskLabels ?? []) {
+        const key = label.trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(label.trim());
+        if (out.length >= 20) return out;
+      }
+    }
+    return out;
+  }, [pomodoros]);
+
   const hiddenInPickerCount = projects.filter(p => p.hidden).length;
   const eligibleProjects = projects.filter(p => {
     if (!showCompletedInPicker && p.completed_at) return false;
@@ -560,7 +660,7 @@ export function PomodoroPage() {
                   if (pid === FREE_PROJECT_ID) {
                     return (
                       <FreeSlotsEditor key={pid} labels={freeTaskLabels} onChange={setFreeTaskLabels}
-                        color={proj?.color} />
+                        color={proj?.color} suggestions={freeLabelSuggestions} />
                     );
                   }
                   if (tasksForP.length === 0) {
@@ -592,6 +692,7 @@ export function PomodoroPage() {
                   labels={freeTaskLabels}
                   onChange={setFreeTaskLabels}
                   color={projectById.get(FREE_PROJECT_ID)?.color ?? "#64748b"}
+                  suggestions={freeLabelSuggestions}
                 />
               </div>
             )}
@@ -709,6 +810,7 @@ export function PomodoroPage() {
           onClose={() => setShowManual(false)}
           onSaved={async () => { setShowManual(false); await refreshList(); }}
           projects={eligibleProjects}
+          freeLabelSuggestions={freeLabelSuggestions}
         />
       )}
 
@@ -951,8 +1053,8 @@ function RestartPromptModal({ proposal, onContinue, onCancel }: {
   );
 }
 
-function ManualPomodoroModal({ onClose, onSaved, projects }: {
-  onClose: () => void; onSaved: () => void; projects: Project[];
+function ManualPomodoroModal({ onClose, onSaved, projects, freeLabelSuggestions }: {
+  onClose: () => void; onSaved: () => void; projects: Project[]; freeLabelSuggestions: string[];
 }) {
   const { tasksByProject } = useProjects();
   const now = new Date();
@@ -1039,7 +1141,8 @@ function ManualPomodoroModal({ onClose, onSaved, projects }: {
                   const proj = projects.find(p => p.id === pid);
                   return (
                     <FreeSlotsEditor key={pid} labels={freeLabels} onChange={setFreeLabels}
-                      color={proj?.color} placeholder="What were you working on?" />
+                      color={proj?.color} placeholder="What were you working on?"
+                      suggestions={freeLabelSuggestions} />
                   );
                 }
                 const tasks = (tasksByProject.get(pid) ?? []).filter(t => !t.completed_at);

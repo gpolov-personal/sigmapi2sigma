@@ -105,6 +105,30 @@ Iterate labels instead of using the single value:
 - `web/src/pages/Projects.tsx` — `attributeMinutes()`.
 - `web/src/components/PomodoroDetailDrawer.tsx` — Free block rendering.
 
+## Follow-up: recent-label suggestions (MRU fold)
+
+When editing a Free slot, offer the last **20 distinct** labels the user has logged, so
+they can reuse them instead of retyping.
+
+- **Source:** derived, not stored. Scan the loaded pomodoros (already newest-first),
+  collect `freeTaskLabels`, dedup case-insensitively (keep the most-recent casing), order
+  by most-recent use, take the first 20. Recomputed via `useMemo` on the pomodoro list;
+  refreshes automatically after each log. No new file or migration.
+- **UI:** each slot input gets a small down-arrow (▾) button on its **left** — shown only
+  when at least one suggestion exists. Two ways to open the fold:
+  - **Typing** auto-opens it showing the list **filtered** by what you've typed
+    (case-insensitive substring); emptying the field closes it.
+  - **Clicking ▾** opens the **full** (unfiltered) recent list to browse.
+  - **Keyboard:** ↓/↑ move the highlight through the visible options (auto-scrolling),
+    Enter picks the highlighted one, Esc closes. Mouse hover also sets the highlight.
+  Clicking or Enter-picking a suggestion fills that slot and closes the fold. The fold
+  also closes when focus leaves the row (`onBlur` with `relatedTarget` containment — no
+  fixed backdrop, so it works inside the z-50 manual-log modal too).
+- **Scope:** available in all three Free-slot editors (live picker, running timer, manual
+  log). `FreeSlotsEditor` gains an optional `suggestions: string[]` prop; `PomodoroPage`
+  computes the list once and passes it to every instance (including down through
+  `ManualPomodoroModal`).
+
 ## Verification
 
 - `npx tsc --noEmit` (web) and `npm run build:web` typecheck clean.
