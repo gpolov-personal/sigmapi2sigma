@@ -21,9 +21,10 @@ export interface Pomodoro {
   project_ids: string[];      // ≥1
   task_ids: string[];         // ≥0; every task's project must be in project_ids
   notes: string;
-  /** Per-pomodoro task label for the Free project. Empty when Free isn't selected
-   *  or when the user didn't type one. Acts as the "task name" analog for Free. */
-  freeTaskLabel: string;
+  /** Per-pomodoro task labels for the Free project ("slots"). Empty when Free isn't
+   *  selected or the user didn't type any. Each label acts as a "task name" analog for
+   *  Free and counts as its own time-attribution unit. */
+  freeTaskLabels: string[];
   source: "live-timer" | "manual";
   context: {
     tmux_session_names: string[];
@@ -76,12 +77,42 @@ async function captureContext(
 function normalize(p: Pomodoro): Pomodoro {
   const patched: any = { ...p };
   let changed = false;
-  if (typeof patched.freeTaskLabel !== "string") { patched.freeTaskLabel = ""; changed = true; }
+  if (!Array.isArray(patched.freeTaskLabels)) {
+    // Legacy records carried a single `freeTaskLabel` string; a non-empty one becomes
+    // a one-element array, anything else becomes [].
+    const legacy = typeof patched.freeTaskLabel === "string" ? patched.freeTaskLabel.trim() : "";
+    patched.freeTaskLabels = legacy ? [legacy] : [];
+    changed = true;
+  }
+  // Always strip the legacy scalar so it never lingers alongside the array (e.g. after a
+  // PATCH that set freeTaskLabels on a record that still carried the old key).
+  if ("freeTaskLabel" in patched) {
+    delete patched.freeTaskLabel;
+    changed = true;
+  }
   if (typeof patched.paused_ms !== "number" || !Number.isFinite(patched.paused_ms) || patched.paused_ms < 0) {
     patched.paused_ms = 0;
     changed = true;
   }
   return changed ? patched : p;
+}
+
+const MAX_FREE_SLOTS = 8;
+
+/** Validate a `freeTaskLabels` value from a request body. Returns an error string, or
+ *  null on success with the cleaned array (trimmed, empties dropped) in `out`. */
+function validateFreeTaskLabels(value: unknown, out: { labels: string[] }): string | null {
+  if (!Array.isArray(value)) return "freeTaskLabels must be an array";
+  if (value.length > MAX_FREE_SLOTS) return `freeTaskLabels must have at most ${MAX_FREE_SLOTS} entries`;
+  const cleaned: string[] = [];
+  for (const v of value) {
+    if (typeof v !== "string") return "each free label must be a string";
+    if (v.length > 200) return "each free label must be ≤200 chars";
+    const t = v.trim();
+    if (t) cleaned.push(t);
+  }
+  out.labels = cleaned;
+  return null;
 }
 
 pomodorosRouter.get("/pomodoros", async (req, res) => {
@@ -125,7 +156,7 @@ pomodorosRouter.get("/pomodoros/:id/activity", async (req, res) => {
 
 pomodorosRouter.post("/pomodoros", async (req, res) => {
   const body = req.body ?? {};
-  const { started_at, ended_at, target_duration_minutes, project_ids, task_ids, notes, freeTaskLabel, paused_ms, source, context } = body;
+  const { started_at, ended_at, target_duration_minutes, project_ids, task_ids, notes, freeTaskLabels, freeTaskLabel, paused_ms, source, context } = body;
 
   if (typeof started_at !== "string" || !Number.isFinite(Date.parse(started_at))) {
     return res.status(400).json({ error: "started_at must be ISO string" });
@@ -146,9 +177,14 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
   if (notes !== undefined && (typeof notes !== "string" || notes.length > 8000)) {
     return res.status(400).json({ error: "notes must be string ≤8000 chars" });
   }
-  if (freeTaskLabel !== undefined && (typeof freeTaskLabel !== "string" || freeTaskLabel.length > 200)) {
-    return res.status(400).json({ error: "freeTaskLabel must be string ≤200 chars" });
-  }
+  // Prefer the new `freeTaskLabels` array; tolerate a legacy single `freeTaskLabel` string.
+  const freeLabelsInput =
+    freeTaskLabels !== undefined ? freeTaskLabels
+    : typeof freeTaskLabel === "string" ? [freeTaskLabel]
+    : [];
+  const freeOut = { labels: [] as string[] };
+  const freeErr = validateFreeTaskLabels(freeLabelsInput, freeOut);
+  if (freeErr) return res.status(400).json({ error: freeErr });
   if (paused_ms !== undefined) {
     if (typeof paused_ms !== "number" || !Number.isFinite(paused_ms) || paused_ms < 0) {
       return res.status(400).json({ error: "paused_ms must be a non-negative finite number" });
@@ -199,7 +235,7 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
     project_ids,
     task_ids: tIds,
     notes: notes ?? "",
-    freeTaskLabel: typeof freeTaskLabel === "string" ? freeTaskLabel : "",
+    freeTaskLabels: freeOut.labels,
     paused_ms: typeof paused_ms === "number" && Number.isFinite(paused_ms) ? paused_ms : 0,
     source,
     context: ctx,
@@ -213,21 +249,23 @@ pomodorosRouter.post("/pomodoros", async (req, res) => {
 
 pomodorosRouter.patch("/pomodoros/:id", async (req, res) => {
   const body = req.body ?? {};
-  const allowed = new Set(["notes", "freeTaskLabel"]);
+  const allowed = new Set(["notes", "freeTaskLabels"]);
   for (const k of Object.keys(body)) {
     if (!allowed.has(k)) return res.status(400).json({ error: `field not patchable: ${k}` });
   }
   if (body.notes !== undefined && (typeof body.notes !== "string" || body.notes.length > 8000)) {
     return res.status(400).json({ error: "notes must be string ≤8000 chars" });
   }
-  if (body.freeTaskLabel !== undefined && (typeof body.freeTaskLabel !== "string" || body.freeTaskLabel.length > 200)) {
-    return res.status(400).json({ error: "freeTaskLabel must be string ≤200 chars" });
+  const freeOut = { labels: [] as string[] };
+  if (body.freeTaskLabels !== undefined) {
+    const freeErr = validateFreeTaskLabels(body.freeTaskLabels, freeOut);
+    if (freeErr) return res.status(400).json({ error: freeErr });
   }
   const file = await readJsonSafe<PomFile>(POMODOROS_FILE, EMPTY_P);
   const idx = file.pomodoros.findIndex(p => p.id === req.params.id);
   if (idx < 0) return res.status(404).json({ error: "pomodoro not found" });
   if (body.notes !== undefined) file.pomodoros[idx].notes = body.notes;
-  if (body.freeTaskLabel !== undefined) file.pomodoros[idx].freeTaskLabel = body.freeTaskLabel;
+  if (body.freeTaskLabels !== undefined) file.pomodoros[idx].freeTaskLabels = freeOut.labels;
   await writeJsonAtomic(POMODOROS_FILE, file);
   res.json(normalize(file.pomodoros[idx]));
 });

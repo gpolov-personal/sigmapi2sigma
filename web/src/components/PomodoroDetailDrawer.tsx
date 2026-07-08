@@ -99,8 +99,10 @@ export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
               const proj = projectById.get(pid);
               const tasks = tasksByProj.get(pid) ?? [];
               const taskLines: ReactElement[] = [];
-              if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
-                taskLines.push(<li key="free" className="text-sm text-slate-200">› {pomodoro.freeTaskLabel}</li>);
+              if (pid === FREE_PROJECT_ID && (pomodoro.freeTaskLabels ?? []).length > 0) {
+                for (const label of pomodoro.freeTaskLabels) {
+                  taskLines.push(<li key={`free:${label}`} className="text-sm text-slate-200">› {label}</li>);
+                }
               } else if (tasks.length === 0) {
                 taskLines.push(<li key="none" className="text-xs italic text-slate-500">(project-level — no specific task)</li>);
               } else {

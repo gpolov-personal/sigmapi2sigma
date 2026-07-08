@@ -16,11 +16,60 @@ const PAGE_SIZE = 50;
 
 function startOfDay(d: Date): Date { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 
+const MAX_FREE_SLOTS = 8;
+
+// Trim, drop empties, and cap the Free-project slot labels before sending to the server.
+function cleanFreeLabels(labels: string[] | undefined): string[] {
+  return (labels ?? []).map(s => s.trim()).filter(Boolean).slice(0, MAX_FREE_SLOTS);
+}
+
 interface NextPomodoroProposal {
   projectIds: string[];
   taskIds: string[];
   durationMinutes: number;
-  freeTaskLabel?: string;
+  freeTaskLabels?: string[];
+}
+
+// Add/remove list of Free-project slot inputs. Holds raw values (may include empty rows
+// while editing); the caller cleans them before persisting. Renders at least one row.
+function FreeSlotsEditor({ labels, onChange, color, placeholder }: {
+  labels: string[];
+  onChange: (next: string[]) => void;
+  color?: string;
+  placeholder?: string;
+}) {
+  const rows = labels.length > 0 ? labels : [""];
+  const setAt = (i: number, v: string) => { const next = rows.slice(); next[i] = v; onChange(next); };
+  const removeAt = (i: number) => { const next = rows.slice(); next.splice(i, 1); onChange(next); };
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <span className="text-xs" style={{ color: color ?? "#64748b" }}>Free:</span>
+        {rows.length > 1 && <span className="text-[10px] text-slate-500">one time-unit per slot</span>}
+      </div>
+      {rows.map((label, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <input
+            value={label}
+            onChange={e => setAt(i, e.target.value)}
+            placeholder={placeholder ?? "What are you working on?"}
+            maxLength={200}
+            className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
+          />
+          {rows.length > 1 && (
+            <button type="button" onClick={() => removeAt(i)} title="Remove slot"
+              className="text-slate-500 hover:text-red-400 px-1"><X size={12} /></button>
+          )}
+        </div>
+      ))}
+      {rows.length < MAX_FREE_SLOTS && (
+        <button type="button" onClick={() => onChange([...rows, ""])}
+          className="self-start text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1">
+          <Plus size={11} /> Add slot
+        </button>
+      )}
+    </div>
+  );
 }
 
 // Same attribution formula as backend / Projects page.
@@ -39,8 +88,15 @@ function attribute(
   const units: { project: string; task: string | null }[] = [];
   for (const pid of p.project_ids) {
     const tasks = tasksByProj.get(pid) ?? [];
-    if (tasks.length === 0) units.push({ project: pid, task: null });
-    else for (const t of tasks) units.push({ project: pid, task: t });
+    if (pid === FREE_PROJECT_ID) {
+      // Each Free slot is its own project-level unit; falls back to one unit if unlabeled.
+      const n = Math.max(1, (p.freeTaskLabels ?? []).length);
+      for (let i = 0; i < n; i++) units.push({ project: pid, task: null });
+    } else if (tasks.length === 0) {
+      units.push({ project: pid, task: null });
+    } else {
+      for (const t of tasks) units.push({ project: pid, task: t });
+    }
   }
   const per = units.length > 0 ? dur / units.length : 0;
   const byProject = new Map<string, number>();
@@ -61,7 +117,7 @@ export function PomodoroPage() {
   const [showCompletedInPicker, setShowCompletedInPicker] = useState(false);
   const [showHiddenInPicker, setShowHiddenInPicker] = useState(false);
   const [pickedTasks, setPickedTasks] = useState<string[]>([]);
-  const [freeTaskLabel, setFreeTaskLabel] = useState<string>(() => loadActive()?.freeTaskLabel ?? "");
+  const [freeTaskLabels, setFreeTaskLabels] = useState<string[]>(() => loadActive()?.freeTaskLabels ?? []);
   const [duration, setDuration] = useState<number>(settings.defaultPomodoroDuration);
   const [pomodoros, setPomodoros] = useState<Pomodoro[]>([]);
   const [showManual, setShowManual] = useState(false);
@@ -110,23 +166,23 @@ export function PomodoroPage() {
   const remainingMs = active ? targetMs - referenceMs : 0;
   const elapsedMs = active ? referenceMs - active.startedAt - accumulatedPausedMs : 0;
 
-  const startTimerFromProposal = useCallback(async (proposal: NextPomodoroProposal, freeLabel?: string) => {
+  const startTimerFromProposal = useCallback(async (proposal: NextPomodoroProposal, freeLabels?: string[]) => {
     if (settings.notificationsEnabled) ensureNotificationPermission();
     // The first user-gesture call to playBeep also unlocks the AudioContext.
     if (settings.audioEnabled) playBeep(settings.startBeepSound);
-    const label = (freeLabel ?? "").trim();
+    const labels = cleanFreeLabels(freeLabels ?? proposal.freeTaskLabels);
     const s: LiveTimerState = {
       startedAt: Date.now(),
       targetDurationMinutes: proposal.durationMinutes,
       topicIds: proposal.projectIds,
       taskIds: proposal.taskIds,
-      freeTaskLabel: label,
+      freeTaskLabels: labels,
     };
     saveActive(s);
     setActive(s);
     setPickedProjects(proposal.projectIds);
     setPickedTasks(proposal.taskIds);
-    setFreeTaskLabel(label);
+    setFreeTaskLabels(labels);
     setDuration(proposal.durationMinutes);
     setNow(Date.now());
   }, [settings.audioEnabled, settings.notificationsEnabled, settings.startBeepSound]);
@@ -145,7 +201,7 @@ export function PomodoroPage() {
       project_ids: state.topicIds,
       task_ids: state.taskIds ?? [],
       notes: "",
-      freeTaskLabel: state.freeTaskLabel ?? "",
+      freeTaskLabels: cleanFreeLabels(state.freeTaskLabels),
       paused_ms,
       source: "live-timer",
     });
@@ -175,12 +231,12 @@ export function PomodoroPage() {
     if (settings.audioEnabled) playBeep(settings.endBeepSound);
     const names = active.topicIds.map(id => projectById.get(id)?.name ?? id.slice(0, 6)).join(", ");
     if (settings.notificationsEnabled) notify("Pomodoro complete", names);
-    // Sync the latest taskIds + freeTaskLabel from React state into the timer
+    // Sync the latest taskIds + freeTaskLabels from React state into the timer
     // before finalizing — covers the case where the user edited either during
     // a running pomodoro and let it auto-complete.
-    const synced: LiveTimerState = { ...active, taskIds: pickedTasks, freeTaskLabel: freeTaskLabel.trim() };
+    const synced: LiveTimerState = { ...active, taskIds: pickedTasks, freeTaskLabels: cleanFreeLabels(freeTaskLabels) };
     finalizePomodoro(synced, targetMs);
-  }, [active, now, targetMs, settings.audioEnabled, settings.notificationsEnabled, settings.endBeepSound, projectById, finalizePomodoro, pickedTasks, freeTaskLabel]);
+  }, [active, now, targetMs, settings.audioEnabled, settings.notificationsEnabled, settings.endBeepSound, projectById, finalizePomodoro, pickedTasks, freeTaskLabels]);
 
   // End-of-rest watcher — same dedup pattern.
   const firedRestEndRef = useRef<number | null>(null);
@@ -232,14 +288,14 @@ export function PomodoroPage() {
     if (pickedProjects.length === 0) return;
     await startTimerFromProposal(
       { projectIds: pickedProjects, taskIds: pickedTasks, durationMinutes: duration },
-      freeTaskLabel
+      freeTaskLabels
     );
   }
 
   async function stopTimer() {
     if (!active) return;
-    // Always sync taskIds + freeTaskLabel from current React state into the active timer before finalizing.
-    const synced: LiveTimerState = { ...active, taskIds: pickedTasks, freeTaskLabel: freeTaskLabel.trim() };
+    // Always sync taskIds + freeTaskLabels from current React state into the active timer before finalizing.
+    const synced: LiveTimerState = { ...active, taskIds: pickedTasks, freeTaskLabels: cleanFreeLabels(freeTaskLabels) };
     saveActive(synced);
     await finalizePomodoro(synced, Date.now());
   }
@@ -325,7 +381,7 @@ export function PomodoroPage() {
     // Prefill picker with the rest's proposal so user can reconfigure.
     setPickedProjects(postFlow.proposal.projectIds);
     setPickedTasks(postFlow.proposal.taskIds);
-    setFreeTaskLabel(postFlow.proposal.freeTaskLabel ?? "");
+    setFreeTaskLabels(postFlow.proposal.freeTaskLabels ?? []);
     setDuration(postFlow.proposal.durationMinutes);
     clearRest();
     setPostFlow(null);
@@ -503,16 +559,8 @@ export function PomodoroPage() {
                   const tasksForP = eligibleTasksForPicked.get(pid) ?? [];
                   if (pid === FREE_PROJECT_ID) {
                     return (
-                      <div key={pid} className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs" style={{ color: proj?.color }}>{proj?.name ?? "Free"}:</span>
-                        <input
-                          value={freeTaskLabel}
-                          onChange={e => setFreeTaskLabel(e.target.value)}
-                          placeholder="What are you working on?"
-                          maxLength={200}
-                          className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
-                        />
-                      </div>
+                      <FreeSlotsEditor key={pid} labels={freeTaskLabels} onChange={setFreeTaskLabels}
+                        color={proj?.color} />
                     );
                   }
                   if (tasksForP.length === 0) {
@@ -537,16 +585,13 @@ export function PomodoroPage() {
               </div>
             )}
 
-            {/* Active free-label input — editable while timer runs (synced to live state at stop time). */}
+            {/* Active free-label slots — editable while timer runs (synced to live state at stop time). */}
             {active && active.topicIds.includes(FREE_PROJECT_ID) && (
-              <div className="mt-2 flex items-center gap-2 flex-wrap">
-                <span className="text-xs" style={{ color: projectById.get(FREE_PROJECT_ID)?.color ?? "#64748b" }}>Free:</span>
-                <input
-                  value={freeTaskLabel}
-                  onChange={e => setFreeTaskLabel(e.target.value)}
-                  placeholder="What are you working on?"
-                  maxLength={200}
-                  className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
+              <div className="mt-2">
+                <FreeSlotsEditor
+                  labels={freeTaskLabels}
+                  onChange={setFreeTaskLabels}
+                  color={projectById.get(FREE_PROJECT_ID)?.color ?? "#64748b"}
                 />
               </div>
             )}
@@ -674,7 +719,7 @@ export function PomodoroPage() {
           onCancel={() => {
             setPickedProjects(postFlow.pomodoro.project_ids);
             setPickedTasks(postFlow.pomodoro.task_ids);
-            setFreeTaskLabel(postFlow.pomodoro.freeTaskLabel ?? "");
+            setFreeTaskLabels(postFlow.pomodoro.freeTaskLabels ?? []);
             setDuration(postFlow.pomodoro.target_duration_minutes);
             setPostFlow(null);
           }}
@@ -685,7 +730,7 @@ export function PomodoroPage() {
               projectIds: postFlow.pomodoro.project_ids,
               taskIds: postFlow.pomodoro.task_ids,
               durationMinutes: postFlow.pomodoro.target_duration_minutes,
-              freeTaskLabel: postFlow.pomodoro.freeTaskLabel ?? "",
+              freeTaskLabels: postFlow.pomodoro.freeTaskLabels ?? [],
             };
             const restMin = Number.isFinite(settings.restMinutes) && settings.restMinutes > 0 ? settings.restMinutes : 5;
             const restEndsAt = Date.now() + restMin * 60_000;
@@ -701,7 +746,7 @@ export function PomodoroPage() {
               projectIds: postFlow.pomodoro.project_ids,
               taskIds: postFlow.pomodoro.task_ids,
               durationMinutes: postFlow.pomodoro.target_duration_minutes,
-            }, postFlow.pomodoro.freeTaskLabel ?? "");
+            }, postFlow.pomodoro.freeTaskLabels ?? []);
           }}
         />
       )}
@@ -714,12 +759,12 @@ export function PomodoroPage() {
           onContinue={async () => {
             const proposal = postFlow.proposal;
             setPostFlow(null);
-            await startTimerFromProposal(proposal, proposal.freeTaskLabel ?? "");
+            await startTimerFromProposal(proposal, proposal.freeTaskLabels ?? []);
           }}
           onCancel={() => {
             setPickedProjects(postFlow.proposal.projectIds);
             setPickedTasks(postFlow.proposal.taskIds);
-            setFreeTaskLabel(postFlow.proposal.freeTaskLabel ?? "");
+            setFreeTaskLabels(postFlow.proposal.freeTaskLabels ?? []);
             setDuration(postFlow.proposal.durationMinutes);
             setPostFlow(null);
           }}
@@ -736,7 +781,7 @@ export function PomodoroPage() {
 /**
  * Recent table cell — one row per project. Each row: a project-colored pill
  * with the project name, followed by white pills (black text) for each task.
- * Free project's freeTaskLabel renders as a single white pill. Project with
+ * Free project's freeTaskLabels render as one white pill per slot. Project with
  * no tasks shows "(project-level)" italic in the same row.
  */
 function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
@@ -753,18 +798,19 @@ function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
       {pomodoro.project_ids.map(pid => {
         const proj = projectById.get(pid);
         const tasks = tasksByProj.get(pid) ?? [];
+        const freeLabels = pomodoro.freeTaskLabels ?? [];
         const hasTasks =
           pid === FREE_PROJECT_ID
-            ? !!pomodoro.freeTaskLabel
+            ? freeLabels.length > 0
             : tasks.length > 0;
         return (
           <div key={pid} className="flex flex-wrap items-center gap-1">
             <ProjectChip project={proj} label={proj?.name ?? "[deleted]"} />
             {hasTasks && <span className="text-slate-500 mx-0.5" aria-hidden>→</span>}
-            {pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel && (
-              <ProjectChip color="#ffffff" label={pomodoro.freeTaskLabel} />
-            )}
-            {pid === FREE_PROJECT_ID && !pomodoro.freeTaskLabel && (
+            {pid === FREE_PROJECT_ID && freeLabels.map((label, i) => (
+              <ProjectChip key={i} color="#ffffff" label={label} />
+            ))}
+            {pid === FREE_PROJECT_ID && freeLabels.length === 0 && (
               <span className="text-xs text-slate-500 italic">(no label)</span>
             )}
             {pid !== FREE_PROJECT_ID && tasks.length === 0 && (
@@ -782,8 +828,8 @@ function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
 
 export function PomodoroChips({ pomodoro }: { pomodoro: Pomodoro }) {
   const { projectById, taskById } = useProjects();
-  // For each project: render a chip per task. Free with a freeTaskLabel renders as
-  // "Free › <label>" using the chip's `label` prop (no Task object needed).
+  // For each project: render a chip per task. Free renders one "Free › <label>" chip
+  // per slot using the chip's `label` prop (no Task object needed).
   const chips: { key: string; project: Project | undefined; task?: ReturnType<typeof taskById.get>; label?: string }[] = [];
   const tasksByProj = new Map<string, string[]>();
   for (const tid of pomodoro.task_ids) {
@@ -795,8 +841,11 @@ export function PomodoroChips({ pomodoro }: { pomodoro: Pomodoro }) {
   for (const pid of pomodoro.project_ids) {
     const proj = projectById.get(pid);
     const tasks = tasksByProj.get(pid) ?? [];
-    if (pid === FREE_PROJECT_ID && pomodoro.freeTaskLabel) {
-      chips.push({ key: pid, project: proj, label: `${proj?.name ?? "Free"} › ${pomodoro.freeTaskLabel}` });
+    const freeLabels = pomodoro.freeTaskLabels ?? [];
+    if (pid === FREE_PROJECT_ID && freeLabels.length > 0) {
+      for (let i = 0; i < freeLabels.length; i++) {
+        chips.push({ key: `${pid}:${i}`, project: proj, label: `${proj?.name ?? "Free"} › ${freeLabels[i]}` });
+      }
       continue;
     }
     if (tasks.length === 0) {
@@ -916,7 +965,7 @@ function ManualPomodoroModal({ onClose, onSaved, projects }: {
   const [projectIds, setProjectIds] = useState<string[]>([]);
   const [taskIds, setTaskIds] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
-  const [freeLabel, setFreeLabel] = useState("");
+  const [freeLabels, setFreeLabels] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -944,7 +993,7 @@ function ManualPomodoroModal({ onClose, onSaved, projects }: {
     const r = await apiRequest<Pomodoro>("POST", "/api/pomodoros", {
       started_at: startedAt, ended_at: endedAt, target_duration_minutes: target,
       project_ids: projectIds, task_ids: taskIds, notes,
-      freeTaskLabel: projectIds.includes(FREE_PROJECT_ID) ? freeLabel.trim() : "",
+      freeTaskLabels: projectIds.includes(FREE_PROJECT_ID) ? cleanFreeLabels(freeLabels) : [],
       source: "manual",
     });
     setBusy(false);
@@ -989,16 +1038,8 @@ function ManualPomodoroModal({ onClose, onSaved, projects }: {
                 if (pid === FREE_PROJECT_ID) {
                   const proj = projects.find(p => p.id === pid);
                   return (
-                    <div key={pid} className="flex flex-wrap items-center gap-1">
-                      <span className="text-xs" style={{ color: proj?.color }}>{proj?.name ?? "Free"}:</span>
-                      <input
-                        value={freeLabel}
-                        onChange={e => setFreeLabel(e.target.value)}
-                        placeholder="What were you working on?"
-                        maxLength={200}
-                        className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
-                      />
-                    </div>
+                    <FreeSlotsEditor key={pid} labels={freeLabels} onChange={setFreeLabels}
+                      color={proj?.color} placeholder="What were you working on?" />
                   );
                 }
                 const tasks = (tasksByProject.get(pid) ?? []).filter(t => !t.completed_at);

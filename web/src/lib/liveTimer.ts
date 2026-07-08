@@ -5,8 +5,15 @@ const REST_KEY = "csv:active-rest";
 
 export interface LiveRestState {
   restEndsAt: number;
-  proposal: { projectIds: string[]; taskIds: string[]; durationMinutes: number; freeTaskLabel?: string };
+  proposal: { projectIds: string[]; taskIds: string[]; durationMinutes: number; freeTaskLabels?: string[] };
   pausedAt?: number | null;  // ms timestamp when currently paused; null/undefined = running
+}
+
+// Coerce a persisted free-label value into an array, tolerating a legacy single string.
+function coerceFreeLabels(v: any): string[] {
+  if (Array.isArray(v)) return v.filter(x => typeof x === "string");
+  if (typeof v === "string" && v.trim()) return [v];
+  return [];
 }
 
 export function loadRest(): LiveRestState | null {
@@ -27,7 +34,7 @@ export function loadRest(): LiveRestState | null {
           projectIds: v.proposal.projectIds,
           taskIds: v.proposal.taskIds,
           durationMinutes: v.proposal.durationMinutes,
-          freeTaskLabel: typeof v.proposal.freeTaskLabel === "string" ? v.proposal.freeTaskLabel : "",
+          freeTaskLabels: coerceFreeLabels(v.proposal.freeTaskLabels ?? v.proposal.freeTaskLabel),
         },
         pausedAt: typeof v.pausedAt === "number" ? v.pausedAt : null,
       };
@@ -49,7 +56,7 @@ export interface LiveTimerState {
   targetDurationMinutes: number;
   topicIds: string[];        // legacy field name kept for backwards compat: holds project IDs
   taskIds?: string[];        // optional, defaults to [] on load
-  freeTaskLabel?: string;    // optional Free-project label, defaults to "" on load
+  freeTaskLabels?: string[]; // optional Free-project labels ("slots"), defaults to [] on load
   pausedAt?: number | null;  // ms timestamp when currently paused; null/undefined = running
   accumulatedPausedMs?: number; // total paused ms across prior pause spans; default 0
 }
@@ -69,7 +76,7 @@ export function loadActive(): LiveTimerState | null {
         targetDurationMinutes: v.targetDurationMinutes,
         topicIds: v.topicIds,
         taskIds: Array.isArray(v.taskIds) ? v.taskIds : [],
-        freeTaskLabel: typeof v.freeTaskLabel === "string" ? v.freeTaskLabel : "",
+        freeTaskLabels: coerceFreeLabels(v.freeTaskLabels ?? v.freeTaskLabel),
         pausedAt: typeof v.pausedAt === "number" ? v.pausedAt : null,
         accumulatedPausedMs: typeof v.accumulatedPausedMs === "number" && v.accumulatedPausedMs >= 0
           ? v.accumulatedPausedMs : 0,

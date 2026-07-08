@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, X, Trash2, Check, RotateCcw, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
-import { Pomodoro, Project, Task, PROJECT_PALETTE, apiRequest } from "../api";
+import { Pomodoro, Project, Task, PROJECT_PALETTE, apiRequest, FREE_PROJECT_ID } from "../api";
 import type { DerivedStatus } from "../api";
 import { useProjects, NewProject, NewTask } from "../ProjectsContext";
 import { useSettings } from "../SettingsContext";
@@ -32,7 +32,11 @@ function attributeMinutes(
   const units: { project: string; task: string | null }[] = [];
   for (const pid of p.project_ids) {
     const tasks = tasksByProj.get(pid) ?? [];
-    if (tasks.length === 0) {
+    if (pid === FREE_PROJECT_ID) {
+      // Each Free slot is its own project-level unit; falls back to one unit if unlabeled.
+      const n = Math.max(1, (p.freeTaskLabels ?? []).length);
+      for (let i = 0; i < n; i++) units.push({ project: pid, task: null });
+    } else if (tasks.length === 0) {
       units.push({ project: pid, task: null });
     } else {
       for (const t of tasks) units.push({ project: pid, task: t });
