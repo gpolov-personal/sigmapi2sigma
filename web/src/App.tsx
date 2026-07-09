@@ -98,6 +98,9 @@ function AppInner() {
           <h1 className="font-serif text-2xl tracking-tight text-white">
             ΣΠ <span className="text-slate-500">∪</span> ΠΣ
           </h1>
+          <span className="text-xs font-mono text-slate-500 self-end pb-1" title="sigmapi2sigma version">
+            v{__APP_VERSION__}
+          </span>
           <div className="flex-1" />
           <button
             onClick={() => setSettingsOpen(true)}
