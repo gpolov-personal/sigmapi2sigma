@@ -86,27 +86,46 @@ export function TmuxMap() {
     [data]
   );
 
-  // Detect LWDs that have >1 distinct active claude conversation. This is a bad pattern
-  // (intentional invariant: at most one Claude conversation per LWD).
-  // Same conversation in two panes does NOT count as a violation.
-  const lwdViolations = useMemo(() => {
-    const cwdToSessionIds = new Map<string, Set<string>>();
+  // Detect ONE conversation open in more than one pane — two Claude processes appending
+  // to the same transcript. Multiple *distinct* conversations in a directory is a
+  // supported workflow (e.g. a checker and an implementer side by side) and is NOT
+  // flagged.
+  //
+  // Only bindings count. An mtime-derived id is the newest .jsonl in the project dir,
+  // which is identical for every pane there by construction — counting those would
+  // report a duplicate for every multi-pane project, which is precisely the false
+  // signal this replaced.
+  const sharedConversations = useMemo(() => {
+    const idToPanes = new Map<string, string[]>();
     if (!data || data.source !== "live") return new Map<string, string[]>();
     for (const s of data.tree) {
       for (const w of s.windows) {
         for (const p of w.panes) {
           if (p.cmd !== "claude" || !p.claudeSessionId) continue;
-          const set = cwdToSessionIds.get(p.cwd) ?? new Set<string>();
-          set.add(p.claudeSessionId);
-          cwdToSessionIds.set(p.cwd, set);
+          if (p.claudeSessionSource !== "binding") continue;
+          const at = idToPanes.get(p.claudeSessionId) ?? [];
+          at.push(`${s.name}:${w.index}.${p.index}`);
+          idToPanes.set(p.claudeSessionId, at);
         }
       }
     }
-    const violations = new Map<string, string[]>();
-    for (const [cwd, ids] of cwdToSessionIds) {
-      if (ids.size > 1) violations.set(cwd, [...ids]);
+    const shared = new Map<string, string[]>();
+    for (const [id, panes] of idToPanes) if (panes.length > 1) shared.set(id, panes);
+    return shared;
+  }, [data]);
+
+  // Panes whose conversation is a guess — the hook has not bound them (yet).
+  const guessedPanes = useMemo(() => {
+    const out = new Set<string>();
+    if (!data || data.source !== "live") return out;
+    for (const s of data.tree) {
+      for (const w of s.windows) {
+        for (const p of w.panes) {
+          if (p.cmd === "claude" && p.claudeSessionSource === "mtime") out.add(p.paneId);
+        }
+      }
     }
-    return violations;
+    return out;
   }, [data]);
 
   function toggle(name: string) {
@@ -273,21 +292,32 @@ export function TmuxMap() {
         <span><span className="inline-block w-3 h-3 rounded-sm border border-slate-600 border-dashed align-middle mr-1"/> unknown — tmux server isn't running at all; can't verify</span>
       </div>
 
-      {lwdViolations.size > 0 && (
+      {sharedConversations.size > 0 && (
         <div className="border border-yellow-700 bg-yellow-950/40 rounded p-3 text-sm space-y-2">
-          <div className="font-semibold text-yellow-300">⚠️ Multiple Claude conversations in the same LWD — bad pattern</div>
+          <div className="font-semibold text-yellow-300">⚠️ One conversation open in multiple panes</div>
           <div className="text-yellow-200/90 text-xs">
-            You usually want at most one Claude conversation per launch directory. Two distinct conversations in the same LWD make session resolution and the topic↔tmux assignment ambiguous. Consider closing one or moving it to a different cwd.
+            Two Claude processes are attached to the same conversation and both append to the same transcript. Usually this means a restore or a manual <span className="font-mono">--resume</span> reattached an already-open conversation. Close one pane, or resume a different conversation in it.
           </div>
           <ul className="text-xs space-y-1">
-            {[...lwdViolations.entries()].map(([cwd, ids]) => (
-              <li key={cwd}>
-                <span className="font-mono text-yellow-200">{cwd}</span>
-                <span className="text-yellow-400/70"> — {ids.length} conversations: </span>
-                <span className="font-mono text-yellow-200">{ids.map(i => i.slice(0, 8)).join(", ")}</span>
+            {[...sharedConversations.entries()].map(([id, panes]) => (
+              <li key={id}>
+                <span className="font-mono text-yellow-200">{id.slice(0, 8)}</span>
+                <span className="text-yellow-400/70"> — open in {panes.length} panes: </span>
+                <span className="font-mono text-yellow-200">{panes.join(", ")}</span>
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {guessedPanes.size > 0 && (
+        <div className="border border-slate-700 bg-slate-900/60 rounded p-3 text-sm space-y-1">
+          <div className="font-semibold text-slate-300">
+            ℹ️ {guessedPanes.size} pane{guessedPanes.size === 1 ? "" : "s"} — conversation is a guess
+          </div>
+          <div className="text-slate-400 text-xs">
+            No pane binding recorded, so the conversation was inferred from the most recently modified transcript in the project directory. That returns the same answer for every pane in a directory, so it can be wrong when more than one conversation is open there — and a restore would then reattach the wrong one. Bindings are written by the <span className="font-mono">SessionStart</span> hook; panes started before it was installed bind themselves on their next start, <span className="font-mono">/clear</span> or compaction.
+          </div>
         </div>
       )}
 
@@ -465,13 +495,14 @@ export function TmuxMap() {
                       {w.panes.map((p: TmuxPane) => {
                         const alive = live && liveIds.has(p.paneId);
                         const dead = live && !liveIds.has(p.paneId);
-                        const lwdConflict = lwdViolations.has(p.cwd) && p.cmd === "claude";
+                        const sharedConv = p.cmd === "claude" && !!p.claudeSessionId
+                          && sharedConversations.has(p.claudeSessionId);
                         return (
                           <PaneCard
                             key={p.paneId}
                             pane={p}
                             state={alive ? "alive" : dead ? "dead" : "unknown"}
-                            lwdConflict={lwdConflict}
+                            sharedConv={sharedConv}
                             onCapture={alive ? async () => {
                               const t = await getText(`/api/panes/${encodeURIComponent(p.paneId)}/scrollback?lines=500`);
                               setScrollback({ paneId: p.paneId, text: t });
@@ -617,12 +648,12 @@ function SaveKillConfirmModal({ name, liveSession, onCancel, onConfirm }: {
   );
 }
 
-function PaneCard({ pane, state, lwdConflict, onCapture, onCommands }:
-  { pane: TmuxPane; state: "alive" | "dead" | "unknown"; lwdConflict?: boolean; onCapture?: () => void; onCommands: () => void }) {
+function PaneCard({ pane, state, sharedConv, onCapture, onCommands }:
+  { pane: TmuxPane; state: "alive" | "dead" | "unknown"; sharedConv?: boolean; onCapture?: () => void; onCommands: () => void }) {
   const isClaude = pane.cmd === "claude";
-  // LWD conflict (multiple distinct claude conversations in same dir) overrides border color.
+  // A conversation open in more than one pane overrides border color.
   // Claude panes get a thicker, brighter border + tinted background to stand out.
-  const baseBorder = lwdConflict
+  const baseBorder = sharedConv
     ? "border-yellow-600"
     : state === "alive"   ? (isClaude ? "border-cyan-500 border-l-4" : "border-green-700")
     : state === "dead"    ? "border-red-700"
@@ -648,12 +679,12 @@ function PaneCard({ pane, state, lwdConflict, onCapture, onCommands }:
           <div className="text-xs font-mono text-slate-500">{pane.paneId} · pane {pane.index}</div>
         </div>
         <div className="flex items-center gap-2">
-          {lwdConflict && (
+          {sharedConv && (
             <span
               className="text-xs text-yellow-400"
-              title="Multiple distinct Claude conversations are running in this LWD — bad pattern. Close one or move to a different directory."
+              title="This conversation is also open in another pane — two Claude processes appending to one transcript. Close one, or resume a different conversation here."
             >
-              ⚠ LWD conflict
+              ⚠ shared conversation
             </span>
           )}
           {badge}

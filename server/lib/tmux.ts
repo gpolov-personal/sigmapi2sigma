@@ -6,6 +6,8 @@ import { encodeCwd } from "./pathEncoding.js";
 import { loadAccounts } from "./accounts.js";
 import { accountForPanePid } from "./procEnviron.js";
 import { readSessionMeta } from "./jsonl.js";
+import { readPaneBindings } from "./paneBindings.js";
+import type { PaneBinding } from "./paneBindings.js";
 
 const pexec = promisify(execFile);
 
@@ -18,6 +20,14 @@ export interface TmuxPane {
   /** For claude panes: the most recent cwd tracked inside the conversation (from JSONL tail). */
   claudeLastCwd: string | null;
   claudeSessionId: string | null;
+  /**
+   * How claudeSessionId was determined:
+   *  - "binding" — authoritative, from the SessionStart hook (per-pane)
+   *  - "mtime"   — a GUESS: newest .jsonl in the project dir. Identical for every pane
+   *                in that dir, so it cannot distinguish two conversations. UI must
+   *                surface this rather than presenting it as fact.
+   */
+  claudeSessionSource: "binding" | "mtime" | null;
   /** Authoritative account (from /proc environ) of the running claude, or null. */
   claudeAccount: string | null;
   /** e.g. "bypassPermissions" — used by restore to re-launch with the same permission mode. */
@@ -50,14 +60,42 @@ export async function isTmuxRunning(): Promise<boolean> {
   }
 }
 
-async function resolveClaudeSessionId(cwd: string, cmd: string, account: string | null): Promise<string | null> {
-  if (cmd !== "claude") return null;
-  if (!account) return null;
+/**
+ * Which conversation is this pane running?
+ *
+ * Prefers the SessionStart hook's binding, which is per-pane and re-fires on /clear.
+ * Falls back to newest-mtime, which returns the SAME answer for every pane in a
+ * project dir — fine with one conversation per directory, wrong the moment there are
+ * two. The fallback is reported as "mtime" so callers can mark it as a guess rather
+ * than pass it off as fact.
+ */
+async function resolveClaudeSessionId(
+  cwd: string,
+  cmd: string,
+  account: string | null,
+  paneId: string,
+  bindings: Map<string, PaneBinding>,
+): Promise<{ id: string | null; source: "binding" | "mtime" | null }> {
+  if (cmd !== "claude") return { id: null, source: null };
+  if (!account) return { id: null, source: null };
   const acc = loadAccounts().find(a => a.name === account);
-  if (!acc) return null;
+  if (!acc) return { id: null, source: null };
+
+  const bound = bindings.get(paneId);
+  if (bound && bound.sessionId) {
+    // Guard against a binding from a different account, and against a conversation
+    // that has since been deleted — either way fall through to the guess.
+    const sameAccount = !bound.configDir || path.resolve(bound.configDir) === acc.configDir;
+    if (sameAccount) {
+      const file = path.join(acc.projectsDir, encodeCwd(cwd), `${bound.sessionId}.jsonl`);
+      try {
+        if ((await fs.stat(file)).isFile()) return { id: bound.sessionId, source: "binding" };
+      } catch { /* transcript gone — fall back */ }
+    }
+  }
   const proj = path.join(acc.projectsDir, encodeCwd(cwd));
   let entries;
-  try { entries = await fs.readdir(proj); } catch { return null; }
+  try { entries = await fs.readdir(proj); } catch { return { id: null, source: null }; }
   const files: { name: string; mtime: number }[] = [];
   for (const f of entries) {
     if (!f.endsWith(".jsonl")) continue;
@@ -66,15 +104,17 @@ async function resolveClaudeSessionId(cwd: string, cmd: string, account: string 
       if (s.isFile()) files.push({ name: f, mtime: s.mtimeMs });
     } catch { /* skip */ }
   }
-  if (!files.length) return null;
+  if (!files.length) return { id: null, source: null };
   files.sort((a, b) => b.mtime - a.mtime);
-  return files[0].name.replace(/\.jsonl$/, "");
+  return { id: files[0].name.replace(/\.jsonl$/, ""), source: "mtime" };
 }
 
 export async function buildTmuxTree(): Promise<TmuxSession[]> {
   if (!(await isTmuxRunning())) return [];
   const sessNames = (await tmux(["list-sessions", "-F", "#{session_name}"])).trim().split("\n").filter(Boolean);
   const sessions: TmuxSession[] = [];
+  // Read once for the whole tree rather than per pane.
+  const bindings = await readPaneBindings();
   for (const sname of sessNames) {
     const winsRaw = (await tmux([
       "list-windows", "-t", sname,
@@ -91,7 +131,8 @@ export async function buildTmuxTree(): Promise<TmuxSession[]> {
       for (const pline of panesRaw) {
         const [pidx, pid_, ppid, pcmd, pcwd] = pline.split("\t");
         const claudeAccount = pcmd === "claude" ? await accountForPanePid(Number(ppid)) : null;
-        const claudeSessionId = await resolveClaudeSessionId(pcwd, pcmd, claudeAccount);
+        const resolved = await resolveClaudeSessionId(pcwd, pcmd, claudeAccount, pid_, bindings);
+        const claudeSessionId = resolved.id;
         let claudeLastCwd: string | null = null;
         let claudePermissionMode: string | null = null;
         if (claudeSessionId) {
@@ -110,6 +151,7 @@ export async function buildTmuxTree(): Promise<TmuxSession[]> {
           cwd: pcwd,
           claudeLastCwd,
           claudeSessionId,
+          claudeSessionSource: resolved.source,
           claudeAccount,
           claudePermissionMode,
         });
