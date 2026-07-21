@@ -282,9 +282,28 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
     session.accounts.length === 1 ? session.accounts[0] : null
   );
   const chosenAccount = resumeAccount ?? (session.accounts.length === 1 ? session.accounts[0] : null);
-  const resumeCmd = chosenAccount && chosenAccount !== "default"
-    ? `CLAUDE_CONFIG_DIR="$(jq -r '.accounts[]|select(.name=="${chosenAccount}").path' ~/.sigmapi2sigma/accounts.json)" claude --resume ${session.id}`
-    : `claude --resume ${session.id}`;
+
+  // Accounts carry an optional launcher (claudep/claudew). Preferring it makes the
+  // copied command identical to what the user types by hand, so the account is
+  // obvious at a glance instead of hidden behind a CLAUDE_CONFIG_DIR lookup.
+  const [accountLaunchers, setAccountLaunchers] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    let cancelled = false;
+    getJSON<{ accounts: { name: string; launcher: string | null }[] }>("/api/accounts")
+      .then(r => {
+        if (cancelled) return;
+        setAccountLaunchers(Object.fromEntries(r.accounts.map(a => [a.name, a.launcher])));
+      })
+      .catch(() => { /* falls back to the CLAUDE_CONFIG_DIR form below */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const chosenLauncher = chosenAccount ? accountLaunchers[chosenAccount] ?? null : null;
+  const resumeCmd = chosenLauncher
+    ? `${chosenLauncher} --resume ${session.id}`
+    : chosenAccount && chosenAccount !== "default"
+      ? `CLAUDE_CONFIG_DIR="$(jq -r '.accounts[]|select(.name=="${chosenAccount}").path' ~/.sigmapi2sigma/accounts.json)" claude --resume ${session.id}`
+      : `claude --resume ${session.id}`;
 
   // Always launch at LWD: `claude --resume <uuid>` only finds the JSONL when run
   // from the same project dir the session was originally launched in.

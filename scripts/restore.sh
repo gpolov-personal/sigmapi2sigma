@@ -59,7 +59,7 @@ restore_one_session() {
   set -e
   local win_count w_idx w_name w_layout p_count first_cwd target_win
   local pi p_cwd claude_sid claude_mode p_idx cmd_str
-  local claude_account env_prefix acc_dir
+  local claude_account env_prefix acc_dir launcher launch_cmd
 
   win_count=$(jq ".sessions[$si].windows | length" "$SNAP")
   for ((wi=0; wi<win_count; wi++)); do
@@ -97,15 +97,22 @@ restore_one_session() {
         acceptEdits|auto|bypassPermissions|default|dontAsk|plan) : ;;
         *) claude_mode="" ;;
       esac
+      # Prefer the account's launcher function (claudep/claudew) so a restored pane
+      # reads exactly like a hand-launched one; fall back to the env-prefix form when
+      # no launcher is configured. send-keys targets an interactive shell, so a shell
+      # function is resolvable here (unlike a direct tmux exec).
       env_prefix=""
+      launcher=""
       if [[ -n "$claude_account" ]]; then
-        acc_dir=$(awk -F'\t' -v n="$claude_account" '$1==n{print $2}' <<< "$ACCOUNTS_TSV") || true
-        [[ -n "$acc_dir" ]] && env_prefix="CLAUDE_CONFIG_DIR=$acc_dir "
+        acc_dir=$(awk  -F'\t' -v n="$claude_account" '$1==n{print $2}' <<< "$ACCOUNTS_TSV") || true
+        launcher=$(awk -F'\t' -v n="$claude_account" '$1==n{print $3}' <<< "$ACCOUNTS_TSV") || true
+        [[ -n "$acc_dir" && -z "$launcher" ]] && env_prefix="CLAUDE_CONFIG_DIR=$acc_dir "
       fi
+      launch_cmd="${launcher:-claude}"
       if [[ -n "$claude_mode" && "$claude_mode" != "default" ]]; then
-        cmd_str="${env_prefix}claude --permission-mode $claude_mode --resume $claude_sid"
+        cmd_str="${env_prefix}${launch_cmd} --permission-mode $claude_mode --resume $claude_sid"
       else
-        cmd_str="${env_prefix}claude --resume $claude_sid"
+        cmd_str="${env_prefix}${launch_cmd} --resume $claude_sid"
       fi
       # Non-fatal: pane may not exist if layout differed or split-window was skipped.
       if ! run "tmux send-keys -t $(printf %q "$target_win.$p_idx") $(printf %q "$cmd_str") Enter" 2>/dev/null; then
