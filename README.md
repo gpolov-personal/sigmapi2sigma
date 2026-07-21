@@ -124,8 +124,8 @@ Tells sigmapi2sigma which Claude config dir(s) — `CLAUDE_CONFIG_DIR` — to re
 ```json
 {
   "accounts": [
-    { "name": "P", "path": "~/.claude-personal" },
-    { "name": "W", "path": "~/.claude-work" }
+    { "name": "P", "path": "~/.claude-personal", "launcher": "claudep" },
+    { "name": "W", "path": "~/.claude-work",     "launcher": "claudew" }
   ]
 }
 ```
@@ -134,7 +134,22 @@ Tells sigmapi2sigma which Claude config dir(s) — `CLAUDE_CONFIG_DIR` — to re
 
 If the file is absent, sigmapi2sigma falls back to a single `default` account at `~/.claude` — zero-config, works out of the box on a machine with only one Claude account. If the file is present but a listed `path` doesn't exist, the server refuses to start.
 
-A conversation shared across accounts (same UUID logged under multiple config dirs) shows up once in the Sessions list, badged with every account it appears under. Resuming a multi-account session prompts which account to launch under, setting `CLAUDE_CONFIG_DIR` accordingly.
+A conversation shared across accounts (same UUID logged under multiple config dirs) shows up once in the Sessions list, badged with every account it appears under. Resuming a multi-account session prompts which account to launch under.
+
+#### `launcher` (optional)
+
+The shell command that launches Claude under this account — typically a function from your shell rc:
+
+```sh
+claudep() { CLAUDE_CONFIG_DIR="$HOME/.claude-personal" CLAUDE_ACCOUNT=personal command claude "$@"; }
+claudew() { CLAUDE_CONFIG_DIR="$HOME/.claude-work"     CLAUDE_ACCOUNT=work     command claude "$@"; }
+```
+
+When set, restore and resume invoke it (`claudew --resume <id>`). When unset, they fall back to prefixing the config dir (`CLAUDE_CONFIG_DIR=… claude --resume <id>`).
+
+Both forms select the same account, but they are **not** equivalent in one respect: only the launcher sets `CLAUDE_ACCOUNT`. Anything keyed on that variable — notably a statusline showing which account a pane is on — renders nothing under the fallback, so a correctly-configured pane can look unmarked. Setting `launcher` keeps restored panes identical to hand-launched ones.
+
+Because the value is typed into a live shell, it must be a bare command word (`[A-Za-z_][A-Za-z0-9_.-]*`); anything with whitespace or shell metacharacters is rejected at startup. It must also name something that resolves in an **interactive** shell — a shell function is fine, since restore and resume both send keystrokes to a real pane rather than exec'ing directly.
 
 ---
 
