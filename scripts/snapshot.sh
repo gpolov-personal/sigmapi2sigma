@@ -19,24 +19,52 @@ encode_cwd() {
   printf '%s' "$1" | sed 's|[/._]|-|g'
 }
 
-# Given a pane cwd and command, resolve the most recently active claude session id.
-# Echoes sessionId or empty string.
+# Pane->conversation bindings written by the SessionStart hook (sp2s-bind.sh, installed
+# from the dotfiles repo). Loaded once as "paneId<TAB>sessionId<TAB>configDir", last
+# entry per pane winning — the log is append-only so later lines are newer, and this
+# machine's clock is not monotonic (WSL jumps on suspend), so file order beats .ts.
+BINDINGS_FILE="$DATA_DIR/pane-bindings.jsonl"
+PANE_BINDINGS=""
+if [[ -f "$BINDINGS_FILE" ]] && command -v jq >/dev/null 2>&1; then
+  PANE_BINDINGS=$(jq -r 'select(.paneId != null and .sessionId != null)
+                         | [.paneId, .sessionId, (.configDir // "")] | @tsv' \
+                    "$BINDINGS_FILE" 2>/dev/null \
+                  | awk -F'\t' '{m[$1]=$2"\t"$3} END{for (k in m) print k"\t"m[k]}') || PANE_BINDINGS=""
+fi
+
+# Resolve which conversation a pane is running.
+# Prefers the hook binding (per-pane, re-fires on /clear). Falls back to newest-mtime,
+# which returns the SAME answer for every pane in a project dir and so cannot tell two
+# conversations apart — correct only under one-conversation-per-directory.
+# Echoes "sessionId<TAB>source" (source: binding|mtime) or "" when nothing resolves.
 resolve_claude_session() {
-  local cwd="$1" cmd="$2" acct="$3"
+  local cwd="$1" cmd="$2" acct="$3" pane_id="$4"
   [[ "$cmd" == "claude" ]] || { echo ""; return 0; }
   [[ -n "$acct" ]] || { echo ""; return 0; }
-  local pdir enc proj newest
+  local pdir enc proj newest bound_sid bound_cfg
   pdir=$(awk -F'\t' -v n="$acct" '$1==n{print $2}' <<< "$ACCOUNTS_TSV")
   [[ -n "$pdir" ]] || { echo ""; return 0; }
   enc=$(encode_cwd "$cwd")
   proj="$pdir/projects/$enc"
   [[ -d "$proj" ]] || { echo ""; return 0; }
+
+  if [[ -n "$PANE_BINDINGS" && -n "$pane_id" ]]; then
+    bound_sid=$(awk -F'\t' -v p="$pane_id" '$1==p{print $2}' <<< "$PANE_BINDINGS")
+    bound_cfg=$(awk -F'\t' -v p="$pane_id" '$1==p{print $3}' <<< "$PANE_BINDINGS")
+    # Ignore a binding from another account, or one whose transcript is gone.
+    if [[ -n "$bound_sid" ]] && { [[ -z "$bound_cfg" ]] || [[ "$bound_cfg" == "$pdir" ]]; } \
+       && [[ -f "$proj/$bound_sid.jsonl" ]]; then
+      printf '%s\tbinding\n' "$bound_sid"
+      return 0
+    fi
+  fi
+
   # Most recently modified top-level JSONL (not in subagents/).
   newest=$(find "$proj" -maxdepth 1 -name "*.jsonl" -printf "%T@ %p\n" 2>/dev/null \
     | sort -rn | head -1 | awk '{print $2}')
   [[ -n "$newest" ]] || { echo ""; return 0; }
   # Filename is <uuid>.jsonl.
-  basename "$newest" .jsonl
+  printf '%s\tmtime\n' "$(basename "$newest" .jsonl)"
 }
 
 # Given a pane cwd and session id, read the JSONL tail (last 256 KB) and extract
@@ -87,7 +115,9 @@ while IFS=$'\t' read -r sess_name; do
     while IFS=$'\t' read -r pane_idx pane_id pane_pid pane_cmd pane_cwd; do
       [[ -n "$pane_idx" ]] || continue
       claude_account=$(sp2s_account_for_pid "$pane_pid")
-      claude_sid=$(resolve_claude_session "$pane_cwd" "$pane_cmd" "$claude_account")
+      claude_resolved=$(resolve_claude_session "$pane_cwd" "$pane_cmd" "$claude_account" "$pane_id")
+      claude_sid=$(printf '%s' "$claude_resolved" | cut -f1)
+      claude_sid_src=$(printf '%s' "$claude_resolved" | cut -f2)
       claude_last_cwd=$(resolve_claude_last_cwd "$pane_cwd" "$claude_sid" "$claude_account")
       claude_perm_mode=$(resolve_claude_permission_mode "$pane_cwd" "$claude_sid" "$claude_account")
       pane_obj=$(jq -n \
@@ -97,11 +127,13 @@ while IFS=$'\t' read -r sess_name; do
         --arg cmd "$pane_cmd" \
         --arg cwd "$pane_cwd" \
         --arg claudeSessionId "$claude_sid" \
+        --arg claudeSessionSource "$claude_sid_src" \
         --arg claudeAccount "$claude_account" \
         --arg claudeLastCwd "$claude_last_cwd" \
         --arg claudePermissionMode "$claude_perm_mode" \
         '{index:$index, paneId:$paneId, pid:$pid, cmd:$cmd, cwd:$cwd,
           claudeSessionId:      (if $claudeSessionId==""      then null else $claudeSessionId      end),
+          claudeSessionSource:  (if $claudeSessionSource==""  then null else $claudeSessionSource  end),
           claudeAccount:        (if $claudeAccount==""        then null else $claudeAccount        end),
           claudeLastCwd:        (if $claudeLastCwd==""        then null else $claudeLastCwd        end),
           claudePermissionMode: (if $claudePermissionMode=="" then null else $claudePermissionMode end)}')

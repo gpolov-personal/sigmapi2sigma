@@ -151,6 +151,28 @@ Both forms select the same account, but they are **not** equivalent in one respe
 
 Because the value is typed into a live shell, it must be a bare command word (`[A-Za-z_][A-Za-z0-9_.-]*`); anything with whitespace or shell metacharacters is rejected at startup. It must also name something that resolves in an **interactive** shell — a shell function is fine, since restore and resume both send keystrokes to a real pane rather than exec'ing directly.
 
+### Pane bindings (`pane-bindings.jsonl`)
+
+Nothing on disk links a tmux pane to a Claude conversation. Without help, sigmapi2sigma can only guess by taking the most recently modified transcript in the project directory — which returns **the same answer for every pane in that directory**. With one conversation per directory that guess is right; with two (say a checker and an implementer), both panes get labelled with one conversation and a restore silently drops the other.
+
+The fix is a `SessionStart` hook that records the binding from the one place that knows it — Claude reports its own `session_id`, tmux reports `TMUX_PANE`:
+
+```
+~/.sigmapi2sigma/pane-bindings.jsonl     append-only, one JSON object per line
+  ts, source, sessionId, transcriptPath, paneId,
+  tmuxSession, windowIndex, paneIndex, cwd, configDir
+```
+
+**sigmapi2sigma only reads this file.** The writer is `sp2s-bind.sh`, installed from the dotfiles repo (`dotfiles/claude/sp2s-bind.sh` + `setup_hooks` in its `install.sh`). Treat the field list above as a contract between the two repos.
+
+Key properties:
+
+- **Joined on `paneId`** (tmux `%N`) — stable for the life of a pane and immune to window renumbering. It only resets when the tmux server restarts, at which point every Claude process has died anyway, so stale bindings are moot.
+- **Last line wins**, by file order rather than `ts`. The log is append-only so later lines are newer, and clocks are not reliably monotonic (WSL jumps on suspend/resume).
+- **Re-fires on `/clear`, `resume`, `compact` and `fork`**, so the binding follows the pane. This is why an inherited environment variable is not enough: `CLAUDE_CODE_SESSION_ID` is exported to child processes at launch and goes stale the moment `/clear` starts a new conversation in the same process.
+
+Without the hook everything still works — resolution falls back to mtime, and panes report `claudeSessionSource: "mtime"` so the UI can mark the value as a guess rather than present it as fact. Panes running from before the hook was installed bind themselves on their next start, `/clear` or compaction.
+
 ---
 
 ## Backup retention

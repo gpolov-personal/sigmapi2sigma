@@ -77,6 +77,9 @@ export interface TmuxPane {
   cwd: string;
   claudeLastCwd: string | null;
   claudeSessionId: string | null;
+  /** "binding" = authoritative (SessionStart hook). "mtime" = a guess: newest .jsonl in
+   *  the project dir, identical for every pane there, so it cannot tell two apart. */
+  claudeSessionSource: "binding" | "mtime" | null;
   claudeAccount: string | null;
   claudePermissionMode: string | null;
 }
