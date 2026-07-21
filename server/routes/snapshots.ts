@@ -86,18 +86,27 @@ snapshotsRouter.post("/resume", async (req, res) => {
   if (!sessionId || !cwd || !tmuxSessionName) {
     return res.status(400).json({ ok: false, error: "sessionId, cwd, tmuxSessionName required" });
   }
+  // sessionId lands inside a command string typed into a live shell, so it must be
+  // a bare UUID — never trust the request body with shell metacharacters.
+  if (!/^[0-9a-fA-F-]{36}$/.test(String(sessionId))) {
+    return res.status(400).json({ ok: false, error: "sessionId must be a UUID" });
+  }
   const safeMode = permissionMode && VALID_PERM_MODES.has(permissionMode) && permissionMode !== "default"
     ? permissionMode : null;
   const acc = account ? loadAccounts().find(a => a.name === account) : null;
-  const envPrefix = acc ? `CLAUDE_CONFIG_DIR=${JSON.stringify(acc.configDir)} ` : "";
+  // Prefer the account's launcher (claudep/claudew) so the pane reads like a
+  // hand-launched one. A launcher is a shell function, so it only resolves inside an
+  // interactive shell — hence new-session + send-keys rather than a direct tmux exec.
+  const envPrefix = acc && !acc.launcher ? `CLAUDE_CONFIG_DIR=${JSON.stringify(acc.configDir)} ` : "";
+  const launchCmd = acc?.launcher ?? "claude";
   const claudeCmd = safeMode
-    ? `${envPrefix}claude --permission-mode ${safeMode} --resume ${sessionId}`
-    : `${envPrefix}claude --resume ${sessionId}`;
+    ? `${envPrefix}${launchCmd} --permission-mode ${safeMode} --resume ${sessionId}`
+    : `${envPrefix}${launchCmd} --resume ${sessionId}`;
   try {
     await pexec("tmux", [
       "new-session", "-d", "-s", tmuxSessionName, "-c", expandHome(cwd),
-      claudeCmd,
     ]);
+    await pexec("tmux", ["send-keys", "-t", `${tmuxSessionName}:`, claudeCmd, "Enter"]);
     res.json({ ok: true });
   } catch (e: any) {
     res.status(500).json({ ok: false, error: String(e.stderr ?? e.message ?? e) });

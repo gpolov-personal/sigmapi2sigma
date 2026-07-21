@@ -1,7 +1,8 @@
 # Shared account-config helpers. Source this: . "$(dirname "$0")/lib/accounts.sh"
 # Requires: jq.
 
-# Emit validated accounts as "name<TAB>configDir" lines. Fatal (return 1) on bad config.
+# Emit validated accounts as "name<TAB>configDir<TAB>launcher" lines (launcher may be
+# empty). Fatal (return 1) on bad config.
 sp2s_load_accounts() {
   local cfg="$HOME/.sigmapi2sigma/accounts.json"
   if [[ ! -f "$cfg" ]]; then
@@ -16,16 +17,22 @@ sp2s_load_accounts() {
   # tab: with IFS made only of "IFS whitespace" chars (space/tab/newline),
   # `read` strips leading/trailing empty fields, silently shifting path into
   # name when name is missing. A non-whitespace IFS char preserves empties.
-  local names="" name pth
-  while IFS=$'\x1f' read -r name pth; do
+  local names="" name pth launcher
+  while IFS=$'\x1f' read -r name pth launcher; do
     [[ -n "$name" ]] || { echo "accounts.sh: every account needs a non-empty 'name'" >&2; return 1; }
     [[ -n "$pth" ]] || { echo "accounts.sh: account '$name' needs a non-empty 'path'" >&2; return 1; }
+    # Mirrors LAUNCHER_RE in accounts.ts: the launcher is typed into a live shell,
+    # so only a bare command word is safe.
+    if [[ -n "$launcher" && ! "$launcher" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ ]]; then
+      echo "accounts.sh: account '$name' has an invalid 'launcher' — must be a bare command word like \"claudew\"" >&2
+      return 1
+    fi
     pth="${pth/#\~/$HOME}"
     [[ -d "$pth" ]] || { echo "accounts.sh: account '$name' path does not exist: $pth" >&2; return 1; }
     case " $names " in *" $name "*) echo "accounts.sh: duplicate account name '$name'" >&2; return 1;; esac
     names="$names $name"
-    printf '%s\t%s\n' "$name" "$pth"
-  done < <(printf '%s' "$json" | jq -r '.accounts[] | [(.name // ""), (.path // "")] | join("")')
+    printf '%s\t%s\t%s\n' "$name" "$pth" "$launcher"
+  done < <(printf '%s' "$json" | jq -r '.accounts[] | [(.name // ""), (.path // ""), (.launcher // "")] | join("")')
 }
 
 # Descend the process tree from $1 to find a process named "claude". Echoes its pid or "".
@@ -48,8 +55,8 @@ sp2s_account_for_pid() {
   ccd=$(cat "/proc/$cpid/environ" 2>/dev/null | tr '\0' '\n' | sed -n 's/^CLAUDE_CONFIG_DIR=//p' | head -1) || true
   [[ -n "$ccd" ]] || ccd="$HOME/.claude"   # plain `claude` → default account
   # Map configDir → name.
-  local name pth
-  while IFS=$'\t' read -r name pth; do
+  local name pth launcher
+  while IFS=$'\t' read -r name pth launcher; do
     [[ "$pth" == "$ccd" ]] && { echo "$name"; return 0; }
   done < <(sp2s_load_accounts)
   echo ""

@@ -10,6 +10,7 @@ import { assignmentsRouter } from "./routes/assignments.js";
 import { settingsRouter } from "./routes/settings.js";
 import { pomodorosRouter } from "./routes/pomodoros.js";
 import { backupsRouter } from "./routes/backups.js";
+import { accountsRouter } from "./routes/accounts.js";
 import { loadAccounts } from "./lib/accounts.js";
 
 const app = express();
@@ -36,6 +37,7 @@ app.use("/api", settingsRouter);
 app.use("/api", pomodorosRouter);
 app.use("/api", backupsRouter);
 app.use("/api", savedTmuxRouter);
+app.use("/api", accountsRouter);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
