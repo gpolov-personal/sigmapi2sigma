@@ -57,17 +57,26 @@ export function TmuxMap() {
   // Sessions present in saved-tmux.json are filtered out — they render exclusively in the
   // amber Saved-for-Later panel above and never as a dead row in the live tree.
   const savedNames = useMemo(() => new Set(saved?.sessions.map(s => s.name) ?? []), [saved]);
-  const { sessions, lastSeenByName } = useMemo(() => {
-    const result = { sessions: [] as typeof data extends { tree: infer T } ? T : any[], lastSeenByName: new Map<string, string>() };
+  const { sessions, lastSeenByName, sourceFileByName } = useMemo(() => {
+    const result = {
+      sessions: [] as typeof data extends { tree: infer T } ? T : any[],
+      lastSeenByName: new Map<string, string>(),
+      // Which snapshot file each dead session was actually found in. Restore must
+      // read THAT file, not default to latest.json — a dead session has usually
+      // rolled out of latest.json and survives only in an older prevN.json.
+      sourceFileByName: new Map<string, string>(),
+    };
     if (!data) return result;
     const byName = new Map<string, typeof data.tree[number]>();
     const liveList = data.source === "live" ? data.tree : [];
     for (const s of liveList) byName.set(s.name, s);
     for (const snap of data.snapshots ?? []) {
+      const fileName = (snap as { _fileName?: string })._fileName;
       for (const s of snap.sessions ?? []) {
         if (!byName.has(s.name)) {
           byName.set(s.name, s);
           if (snap.ts) result.lastSeenByName.set(s.name, snap.ts);
+          if (fileName) result.sourceFileByName.set(s.name, fileName);
         }
       }
     }
@@ -155,10 +164,14 @@ export function TmuxMap() {
 
   async function restoreOnly(sessionName: string, force: boolean) {
     setRestoreLog(`Restoring "${sessionName}"…`);
+    // Restore from the exact snapshot the session was displayed from. Without this the
+    // script defaults to latest.json, which no longer contains a session that has since
+    // rolled out of the rotation — so the restore silently matched nothing.
+    const snapshotName = sourceFileByName.get(sessionName);
     try {
       const r = await postJSON<{
         ok: boolean; exitCode?: number; stdout?: string; stderr?: string; error?: string;
-      }>("/api/restore", { only: sessionName, force });
+      }>("/api/restore", { only: sessionName, force, snapshotName });
       const header = r.ok ? "" : `RESTORE FAILED (exit ${r.exitCode ?? "?"})\n\n`;
       setRestoreLog(
         header +
@@ -389,7 +402,9 @@ export function TmuxMap() {
                         <PaneCard
                           key={`${w.index}.${p.index}.${p.paneId}`}
                           pane={p}
-                          state="unknown"
+                          // Once the saved session is running again, show its panes as
+                          // alive instead of a permanent "unknown" that reads as dead.
+                          state={aliveNow ? "alive" : "unknown"}
                           onCommands={() => openCommands(p.paneId)}
                         />
                       )))}

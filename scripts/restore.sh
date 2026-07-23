@@ -126,6 +126,7 @@ restore_one_session() {
 OK=()
 SKIP=()
 FAIL=()
+only_matched=0
 
 sess_count=$(jq '.sessions | length' "$SNAP")
 for ((si=0; si<sess_count; si++)); do
@@ -134,6 +135,7 @@ for ((si=0; si<sess_count; si++)); do
   if [[ -n "$ONLY" && "$sname" != "$ONLY" ]]; then
     continue
   fi
+  only_matched=1
 
   if grep -qxF "$sname" <<<"$existing_sessions"; then
     if [[ "$FORCE" -eq 1 ]]; then
@@ -163,6 +165,17 @@ for ((si=0; si<sess_count; si++)); do
   fi
   rm -f "$errfile"
 done
+
+# A --only that matched no session in the snapshot is a hard error, not a no-op:
+# the caller asked to restore a specific session that simply isn't in this file
+# (e.g. it rolled out of latest.json). Failing loudly prevents this from looking
+# like success. See the source-snapshot fix in the Tmux Map restore path.
+if [[ -n "$ONLY" && "$only_matched" -eq 0 ]]; then
+  echo "ERROR: session \"$ONLY\" not found in snapshot: $SNAP" >&2
+  available=$(jq -r '.sessions[].name' "$SNAP" 2>/dev/null | paste -sd, -)
+  echo "  available in this snapshot: ${available:-<none>}" >&2
+  exit 2
+fi
 
 echo
 echo "=== restore summary ==="
