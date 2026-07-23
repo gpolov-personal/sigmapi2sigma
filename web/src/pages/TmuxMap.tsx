@@ -345,13 +345,19 @@ export function TmuxMap() {
             <span className="text-xs text-slate-400">{saved.sessions.length} pinned · survives snapshot rotation</span>
           </div>
           {!collapsed.has(KEY_SAVED_SECTION) && (
-          <div className="divide-y divide-amber-900/40">
+          <div className="p-2 space-y-2">
             {saved.sessions.map(s => {
               const m = saved.meta[s.name];
               const aliveNow = liveSessionNames.has(s.name);
               const allPaneIds = s.windows.flatMap(w => w.panes.map(p => p.paneId));
+              // A restored saved session is genuinely alive; colour its entry green like
+              // the live sessions below instead of leaving the whole section amber, which
+              // read as "still parked / not active" even after a successful restore.
+              const entryTone = aliveNow
+                ? "border-green-900 bg-slate-900/30"
+                : "border-amber-800/50 bg-amber-950/10";
               return (
-                <div key={s.name} className="px-4 py-2">
+                <div key={s.name} className={`px-4 py-2 border rounded ${entryTone}`}>
                   <div className="flex items-center gap-3 mb-2">
                     <button
                       onClick={() => toggle(keyForSavedEntry(s.name))}
