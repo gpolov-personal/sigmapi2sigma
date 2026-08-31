@@ -33,9 +33,12 @@ function attributeMinutes(
   for (const pid of p.project_ids) {
     const tasks = tasksByProj.get(pid) ?? [];
     if (pid === FREE_PROJECT_ID) {
-      // Each Free slot is its own project-level unit; falls back to one unit if unlabeled.
-      const n = Math.max(1, (p.freeTaskLabels ?? []).length);
-      for (let i = 0; i < n; i++) units.push({ project: pid, task: null });
+      // Free carries both kinds: real tasks (like any project) and one-off labels, each
+      // its own unit. Falls back to one project-level unit when there is neither.
+      const labels = p.freeTaskLabels ?? [];
+      for (const t of tasks) units.push({ project: pid, task: t });
+      for (let i = 0; i < labels.length; i++) units.push({ project: pid, task: null });
+      if (tasks.length === 0 && labels.length === 0) units.push({ project: pid, task: null });
     } else if (tasks.length === 0) {
       units.push({ project: pid, task: null });
     } else {

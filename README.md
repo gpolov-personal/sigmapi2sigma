@@ -41,6 +41,7 @@ Same data, two angles. The union is your workspace.
 |---|---|
 | 🧭 **Projects** | Long-running pursuits with optional task breakdowns. Each project is bijectively bound to a tmux session by name — your tools and your concept of work converge. |
 | ✅ **Tasks** | Short units inside projects. Pomodoros can target multiple tasks across multiple projects (real life is multitasking — even with one person, AI tools mean you wait, and pivot). |
+| 🧺 **Free** | A built-in project for work too small to deserve one of its own. Holds **real tasks** you reuse across pomodoros (`taxes`, `invoices`) *and* **one-off labels** scoped to a single pomodoro. Both are offered side by side when you pick Free, kept visually distinct, and each counts as its own time unit. A one-off can be promoted to a real task in one click. |
 | 🍅 **Pomodoros** | Live timer with rest cycle, configurable start/end beep, persisted across browser refresh. Tab title shows remaining time. Notes prompted after stop. |
 | 📅 **Calendar** | Year heatmap (GitHub-contribution-style) and month grid. Filter by project. Click any day → all that day's pomodoros, click any pomodoro → its conversations + commands. |
 | 🖥️ **Tmux Map** | Live view of every tmux session, window, pane. Panes running an AI assistant are highlighted distinctly. Snapshot the state every 5 minutes; restore after a crash. |
