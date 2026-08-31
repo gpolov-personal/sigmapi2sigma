@@ -99,17 +99,22 @@ export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
               const proj = projectById.get(pid);
               const tasks = tasksByProj.get(pid) ?? [];
               const taskLines: ReactElement[] = [];
-              if (pid === FREE_PROJECT_ID && (pomodoro.freeTaskLabels ?? []).length > 0) {
-                for (const label of pomodoro.freeTaskLabels) {
-                  taskLines.push(<li key={`free:${label}`} className="text-sm text-slate-200">› {label}</li>);
-                }
-              } else if (tasks.length === 0) {
+              // Free carries both kinds: its real tasks list first, then the one-off
+              // labels, tagged so the two are never confused.
+              const freeLabels = pid === FREE_PROJECT_ID ? (pomodoro.freeTaskLabels ?? []) : [];
+              for (const tid of tasks) {
+                const t = taskById.get(tid);
+                taskLines.push(<li key={tid} className="text-sm text-slate-200">› {t?.name ?? "[deleted task]"}</li>);
+              }
+              freeLabels.forEach((label, i) => {
+                taskLines.push(
+                  <li key={`free:${i}`} className="text-sm italic text-slate-300">
+                    › {label} <span className="text-xs not-italic text-slate-500">(one-off)</span>
+                  </li>
+                );
+              });
+              if (tasks.length === 0 && freeLabels.length === 0) {
                 taskLines.push(<li key="none" className="text-xs italic text-slate-500">(project-level — no specific task)</li>);
-              } else {
-                for (const tid of tasks) {
-                  const t = taskById.get(tid);
-                  taskLines.push(<li key={tid} className="text-sm text-slate-200">› {t?.name ?? "[deleted task]"}</li>);
-                }
               }
               out.push(
                 <div
