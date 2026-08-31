@@ -1,4 +1,7 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  Fragment, useCallback, useEffect, useMemo, useRef, useState,
+  type Dispatch, type SetStateAction, type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { Plus, X, AlarmClock, Coffee, Play, Pause, ChevronDown, ArrowUpToLine } from "lucide-react";
 import { Pomodoro, Project, Task, apiRequest, FREE_PROJECT_ID } from "../api";
 import { useSettings } from "../SettingsContext";
@@ -10,7 +13,7 @@ import {
   LiveTimerState, LiveRestState, clearActive, clearRest, ensureNotificationPermission,
   fmtMmSs, loadActive, loadRest, notify, playBeep, saveActive, saveRest,
 } from "../lib/liveTimer";
-import { pomodoroMinutes } from "../lib/pomodoro";
+import { attributePomodoro as attribute, pomodoroMinutes } from "../lib/pomodoro";
 
 const PAGE_SIZE = 50;
 
@@ -20,10 +23,8 @@ const MAX_FREE_SLOTS = 8;
 
 // A logged Free pomodoro can carry both real tasks and one-off labels, and the two must
 // not read alike. Real tasks keep the solid chip every project's tasks use; one-off
-// labels get a dashed italic pill. Two variants because the pill background differs by
-// context — white in the per-project cell, the project's own colour in the chip row.
+// labels get a dashed italic pill against the white per-project cell background.
 const ONE_OFF_CHIP_ON_WHITE = "border border-dashed border-slate-400 italic";
-const ONE_OFF_CHIP_ON_COLOR = "border border-dashed border-white/60 italic";
 
 // Trim, drop empties, and cap the Free-project slot labels before sending to the server.
 function cleanFreeLabels(labels: string[] | undefined): string[] {
@@ -46,16 +47,32 @@ interface NextPomodoroProposal {
 // Esc closes.
 // `onPromote`, when set, adds a ⇧ button per non-empty row that turns that label into a
 // persistent Free task.
-function FreeSlotsEditor({ labels, onChange, placeholder, suggestions = [], onPromote }: {
+function FreeSlotsEditor({ labels, onChange, placeholder, suggestions = [], onPromote, busy }: {
   labels: string[];
-  onChange: (next: string[]) => void;
+  onChange: Dispatch<SetStateAction<string[]>>;
   placeholder?: string;
   suggestions?: string[];
-  onPromote?: (index: number, label: string) => void;
+  onPromote?: (label: string) => void;
+  busy?: boolean;
 }) {
   const [open, setOpen] = useState<{ row: number; mode: "all" | "filtered" } | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const rows = labels.length > 0 ? labels : [""];
+
+  // `open` is keyed by row index, so adding or removing a row re-points it at whichever
+  // label now sits at that index — after a promote, the fold would hang under the row
+  // that shifted up and picking a suggestion would overwrite *that* label. Reset on row
+  // count only: keying on content would close the fold on every keystroke and break
+  // type-to-filter.
+  const rowCount = labels.length;
+  const prevRowCount = useRef(rowCount);
+  useEffect(() => {
+    if (prevRowCount.current !== rowCount) {
+      prevRowCount.current = rowCount;
+      setOpen(null);
+      setActiveIndex(-1);
+    }
+  }, [rowCount]);
 
   const setAt = (i: number, v: string) => { const next = rows.slice(); next[i] = v; onChange(next); };
   const removeAt = (i: number) => { const next = rows.slice(); next.splice(i, 1); onChange(next); setOpen(null); };
@@ -135,10 +152,14 @@ function FreeSlotsEditor({ labels, onChange, placeholder, suggestions = [], onPr
               className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
             />
             {onPromote && label.trim().length > 0 && (
-              <button type="button" onClick={() => onPromote(i, label.trim())}
+              // blur before promoting: this row is about to be removed, and because rows
+              // are keyed by index the focused button would otherwise end up bound to the
+              // label that shifts up — a stray Enter/Space would then promote that one.
+              <button type="button" disabled={busy}
+                onClick={e => { e.currentTarget.blur(); onPromote(label.trim()); }}
                 title="Save as a Free task (keeps it for future pomodoros)"
                 aria-label="Save as a Free task"
-                className="text-slate-500 hover:text-emerald-400 px-1 shrink-0"><ArrowUpToLine size={12} /></button>
+                className="text-slate-500 hover:text-emerald-400 disabled:opacity-40 px-1 shrink-0"><ArrowUpToLine size={12} /></button>
             )}
             {rows.length > 1 && (
               <button type="button" onClick={() => removeAt(i)} title="Remove slot"
@@ -184,16 +205,21 @@ function FreeSlotsEditor({ labels, onChange, placeholder, suggestions = [], onPr
 // are already shown read-only in the generic Tasks chip row).
 function FreeBlock({
   color, labels, onChange, suggestions, placeholder,
-  tasks, pickedTaskIds, onToggleTask, onEnsureTask,
+  tasks, pickedTaskIds, onToggleTask, onSelectTask, onEnsureTask,
 }: {
   color?: string;
   labels: string[];
-  onChange: (next: string[]) => void;
+  /** Takes an updater, not just an array: promote resolves after an await, so it must
+   *  edit the latest labels rather than the array captured at render time. */
+  onChange: Dispatch<SetStateAction<string[]>>;
   suggestions: string[];
   placeholder?: string;
   tasks?: Task[];
   pickedTaskIds?: string[];
+  /** Toggles — for the task buttons, where clicking again should deselect. */
   onToggleTask?: (id: string) => void;
+  /** Idempotent select — for promote/"+ new", where a double-fire must not deselect. */
+  onSelectTask?: (id: string) => void;
   onEnsureTask?: (name: string) => Promise<string | null>;
 }) {
   const [adding, setAdding] = useState(false);
@@ -205,12 +231,18 @@ function FreeBlock({
 
   // Create-or-reuse a Free task by name, then select it. Shared by "+ new" and by
   // promoting a one-off slot.
+  //
+  // Everything after the await must go through an updater rather than a value captured
+  // before it: `busy` guards the common case, but two different slots can still be in
+  // flight together, and a stale snapshot would resurrect an already-promoted label or
+  // undo a selection. Selection uses the idempotent onSelectTask for the same reason —
+  // a toggle firing twice would deselect the task and drop the work entirely.
   async function commitTask(name: string, onDone?: () => void) {
-    if (!onEnsureTask || !name.trim()) return;
+    if (!onEnsureTask || !name.trim() || busy) return;
     setBusy(true); setErr(null);
     try {
       const id = await onEnsureTask(name.trim());
-      if (id && onToggleTask && !picked.includes(id)) onToggleTask(id);
+      if (id) (onSelectTask ?? onToggleTask)?.(id);
       onDone?.();
     } catch (e: any) {
       setErr(String(e?.message ?? e));
@@ -219,11 +251,17 @@ function FreeBlock({
     }
   }
 
-  async function promote(index: number, label: string) {
+  // Removes the promoted label by value, not by index: the array may have shifted while
+  // the create was in flight, and splicing a stale index deletes the wrong row.
+  async function promote(label: string) {
     await commitTask(label, () => {
-      const next = labels.slice();
-      next.splice(index, 1);
-      onChange(next);
+      onChange(prev => {
+        const i = prev.findIndex(l => l.trim() === label);
+        if (i < 0) return prev;
+        const next = prev.slice();
+        next.splice(i, 1);
+        return next;
+      });
     });
   }
 
@@ -276,6 +314,7 @@ function FreeBlock({
           placeholder={placeholder}
           suggestions={suggestions}
           onPromote={onEnsureTask ? promote : undefined}
+          busy={busy}
         />
         {err && <div className="text-[11px] text-red-400 pl-[4.5rem]">{err}</div>}
       </div>
@@ -283,54 +322,20 @@ function FreeBlock({
   );
 }
 
-// Same attribution formula as backend / Projects page.
-function attribute(
-  p: Pomodoro,
-  taskById: Map<string, Task>
-): { byProject: Map<string, number>; byTask: Map<string, number> } {
-  const dur = pomodoroMinutes(p);
-  const tasksByProj = new Map<string, string[]>();
-  for (const tid of p.task_ids) {
-    const t = taskById.get(tid);
-    if (!t || !p.project_ids.includes(t.project_id)) continue;
-    const arr = tasksByProj.get(t.project_id);
-    if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
-  }
-  const units: { project: string; task: string | null }[] = [];
-  for (const pid of p.project_ids) {
-    const tasks = tasksByProj.get(pid) ?? [];
-    if (pid === FREE_PROJECT_ID) {
-      // Free carries both kinds: real tasks (like any project) and one-off labels, each
-      // its own unit. Falls back to one project-level unit when there is neither.
-      const labels = p.freeTaskLabels ?? [];
-      for (const t of tasks) units.push({ project: pid, task: t });
-      for (let i = 0; i < labels.length; i++) units.push({ project: pid, task: null });
-      if (tasks.length === 0 && labels.length === 0) units.push({ project: pid, task: null });
-    } else if (tasks.length === 0) {
-      units.push({ project: pid, task: null });
-    } else {
-      for (const t of tasks) units.push({ project: pid, task: t });
-    }
-  }
-  const per = units.length > 0 ? dur / units.length : 0;
-  const byProject = new Map<string, number>();
-  const byTask = new Map<string, number>();
-  for (const u of units) {
-    byProject.set(u.project, (byProject.get(u.project) ?? 0) + per);
-    if (u.task) byTask.set(u.task, (byTask.get(u.task) ?? 0) + per);
-  }
-  return { byProject, byTask };
-}
 
 export function PomodoroPage() {
   const { settings } = useSettings();
   const { projects, projectById, tasksByProject, taskById, refresh, updateTask } = useProjects();
   const [active, setActive] = useState<LiveTimerState | null>(() => loadActive());
   const [now, setNow] = useState(Date.now());
-  const [pickedProjects, setPickedProjects] = useState<string[]>([]);
+  // Seeded from the live timer, like freeTaskLabels below: a refresh mid-pomodoro used to
+  // reset these to [] while the timer itself survived, and stop-time then wrote that empty
+  // array back over the persisted selections — silently dropping every picked task from
+  // the logged record.
+  const [pickedProjects, setPickedProjects] = useState<string[]>(() => loadActive()?.topicIds ?? []);
   const [showCompletedInPicker, setShowCompletedInPicker] = useState(false);
   const [showHiddenInPicker, setShowHiddenInPicker] = useState(false);
-  const [pickedTasks, setPickedTasks] = useState<string[]>([]);
+  const [pickedTasks, setPickedTasks] = useState<string[]>(() => loadActive()?.taskIds ?? []);
   const [freeTaskLabels, setFreeTaskLabels] = useState<string[]>(() => loadActive()?.freeTaskLabels ?? []);
   const [duration, setDuration] = useState<number>(settings.defaultPomodoroDuration);
   const [pomodoros, setPomodoros] = useState<Pomodoro[]>([]);
@@ -497,6 +502,11 @@ export function PomodoroPage() {
   function toggleTask(id: string) {
     setPickedTasks(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
+  // Idempotent counterpart, for selecting a task we just created. A toggle here would
+  // deselect on a second fire and silently drop the task from the pomodoro.
+  function selectTask(id: string) {
+    setPickedTasks(prev => prev.includes(id) ? prev : [...prev, id]);
+  }
 
   async function startTimer() {
     if (pickedProjects.length === 0) return;
@@ -514,16 +524,26 @@ export function PomodoroPage() {
     await finalizePomodoro(synced, Date.now());
   }
 
+  // Fold the picker's current selections into a live-timer record before persisting it.
+  // keepGoing/pause/resume rewrite the whole record, so spreading `active` alone would
+  // write back the tasks and labels as they were at Start and discard anything edited
+  // since — the One-off row stays editable for the entire pomodoro.
+  const withCurrentSelections = useCallback((base: LiveTimerState): LiveTimerState => ({
+    ...base,
+    taskIds: pickedTasks,
+    freeTaskLabels: cleanFreeLabels(freeTaskLabels),
+  }), [pickedTasks, freeTaskLabels]);
+
   function keepGoing() {
     if (!active) return;
-    const next: LiveTimerState = { ...active, targetDurationMinutes: active.targetDurationMinutes + settings.defaultPomodoroDuration };
+    const next = withCurrentSelections({ ...active, targetDurationMinutes: active.targetDurationMinutes + settings.defaultPomodoroDuration });
     saveActive(next);
     setActive(next);
   }
 
   function pauseTimer() {
     if (!active || active.pausedAt) return;
-    const next: LiveTimerState = { ...active, pausedAt: Date.now() };
+    const next = withCurrentSelections({ ...active, pausedAt: Date.now() });
     saveActive(next);
     setActive(next);
   }
@@ -531,11 +551,11 @@ export function PomodoroPage() {
   function resumeTimer() {
     if (!active || !active.pausedAt) return;
     const additional = Date.now() - active.pausedAt;
-    const next: LiveTimerState = {
+    const next = withCurrentSelections({
       ...active,
       pausedAt: null,
       accumulatedPausedMs: (active.accumulatedPausedMs ?? 0) + additional,
-    };
+    });
     saveActive(next);
     setActive(next);
   }
@@ -618,9 +638,20 @@ export function PomodoroPage() {
     }
     const r = await apiRequest<Task>("POST", "/api/tasks", { project_id: FREE_PROJECT_ID, name });
     if (r.ok) { await refresh(); return (r.body as Task).id; }
-    // Lost a race against another tab creating the same name.
+    // Lost a race against another tab creating the same name. The local list was stale, so
+    // it may also be stale about completion: fetch the duplicate and reopen it if needed,
+    // the same as the found-locally branch above. Skipping this returned an id the picker
+    // then filtered out as completed, so the click looked like it did nothing.
     const dupId = (r.body as any)?.details?.existingId;
-    if (r.status === 409 && typeof dupId === "string") { await refresh(); return dupId; }
+    if (r.status === 409 && typeof dupId === "string") {
+      const dup = await apiRequest<Task>("GET", `/api/tasks/${dupId}`);
+      if (dup.ok && (dup.body as Task).completed_at) {
+        await updateTask(dupId, { completed_at: null });   // refreshes the context itself
+      } else {
+        await refresh();
+      }
+      return dupId;
+    }
     throw new Error((r.body as any)?.error ?? "could not create Free task");
   }, [tasksByProject, updateTask, refresh]);
 
@@ -820,6 +851,7 @@ export function PomodoroPage() {
                         tasks={tasksForP}
                         pickedTaskIds={pickedTasks}
                         onToggleTask={toggleTask}
+                        onSelectTask={selectTask}
                         onEnsureTask={ensureFreeTask} />
                     );
                   }
@@ -1087,48 +1119,6 @@ function PomodoroProjectsCell({ pomodoro }: { pomodoro: Pomodoro }) {
   );
 }
 
-export function PomodoroChips({ pomodoro }: { pomodoro: Pomodoro }) {
-  const { projectById, taskById } = useProjects();
-  // For each project: render a chip per task. Free additionally renders one
-  // "Free › <label>" chip per one-off slot using the chip's `label` prop (no Task object
-  // needed), marked `oneOff` so it cannot be mistaken for one of Free's real tasks.
-  const chips: {
-    key: string; project: Project | undefined;
-    task?: ReturnType<typeof taskById.get>; label?: string; oneOff?: boolean;
-  }[] = [];
-  const tasksByProj = new Map<string, string[]>();
-  for (const tid of pomodoro.task_ids) {
-    const t = taskById.get(tid);
-    if (!t) continue;
-    const arr = tasksByProj.get(t.project_id);
-    if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
-  }
-  for (const pid of pomodoro.project_ids) {
-    const proj = projectById.get(pid);
-    const tasks = tasksByProj.get(pid) ?? [];
-    const freeLabels = pid === FREE_PROJECT_ID ? (pomodoro.freeTaskLabels ?? []) : [];
-    for (const tid of tasks) chips.push({ key: `${pid}:${tid}`, project: proj, task: taskById.get(tid) });
-    for (let i = 0; i < freeLabels.length; i++) {
-      chips.push({
-        key: `${pid}:label:${i}`, project: proj,
-        label: `${proj?.name ?? "Free"} › ${freeLabels[i]}`,
-        oneOff: true,
-      });
-    }
-    if (tasks.length === 0 && freeLabels.length === 0) chips.push({ key: pid, project: proj });
-  }
-  return (
-    <>
-      {chips.map(c => (
-        <ProjectChip key={c.key} project={c.project} task={c.task ?? null}
-          label={c.label ?? (c.project ? undefined : "[deleted]")}
-          className={c.oneOff ? ONE_OFF_CHIP_ON_COLOR : undefined}
-          title={c.oneOff ? `one-off label · ${c.label}` : undefined} />
-      ))}
-    </>
-  );
-}
-
 function NotesAndNextModal({ pomodoro, restMinutes, onCancel, onTakeRest, onContinueNow }: {
   pomodoro: Pomodoro;
   restMinutes: number;
@@ -1248,6 +1238,10 @@ function ManualPomodoroModal({ onClose, onSaved, projects, freeLabelSuggestions,
   function toggleTask(id: string) {
     setTaskIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
+  // Idempotent, for a task we just created — see PomodoroPage.selectTask.
+  function selectTask(id: string) {
+    setTaskIds(prev => prev.includes(id) ? prev : [...prev, id]);
+  }
 
   async function save() {
     setError(null);
@@ -1311,6 +1305,7 @@ function ManualPomodoroModal({ onClose, onSaved, projects, freeLabelSuggestions,
                       tasks={(tasksByProject.get(FREE_PROJECT_ID) ?? []).filter(t => !t.completed_at)}
                       pickedTaskIds={taskIds}
                       onToggleTask={toggleTask}
+                      onSelectTask={selectTask}
                       onEnsureTask={onEnsureFreeTask} />
                   );
                 }

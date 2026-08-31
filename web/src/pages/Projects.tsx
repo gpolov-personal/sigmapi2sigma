@@ -7,53 +7,12 @@ import { useSettings } from "../SettingsContext";
 import { ProjectChip } from "../components/ProjectChip";
 import { PomodoroDetailDrawer } from "../components/PomodoroDetailDrawer";
 import { formatDuration, computeProjectAbbreviation } from "../utils";
-import { pomodoroMinutes } from "../lib/pomodoro";
+import { attributePomodoro as attributeMinutes, pomodoroMinutes } from "../lib/pomodoro";
 
 interface ProjectStats { todayMin: number; weekMin: number; allMin: number; }
 
 function emptyStats(): ProjectStats { return { todayMin: 0, weekMin: 0, allMin: 0 }; }
 
-// Time attribution per pomodoro (matches backend formula):
-// units = each picked task + each picked project that has no task picked under it.
-// Each unit gets total_min / units.length.
-function attributeMinutes(
-  p: Pomodoro,
-  taskById: Map<string, Task>
-): { byProject: Map<string, number>; byTask: Map<string, number> } {
-  const dur = pomodoroMinutes(p);
-  const tasksByProj = new Map<string, string[]>();
-  for (const tid of p.task_ids) {
-    const t = taskById.get(tid);
-    if (!t) continue;
-    if (!p.project_ids.includes(t.project_id)) continue;
-    const arr = tasksByProj.get(t.project_id);
-    if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
-  }
-  const units: { project: string; task: string | null }[] = [];
-  for (const pid of p.project_ids) {
-    const tasks = tasksByProj.get(pid) ?? [];
-    if (pid === FREE_PROJECT_ID) {
-      // Free carries both kinds: real tasks (like any project) and one-off labels, each
-      // its own unit. Falls back to one project-level unit when there is neither.
-      const labels = p.freeTaskLabels ?? [];
-      for (const t of tasks) units.push({ project: pid, task: t });
-      for (let i = 0; i < labels.length; i++) units.push({ project: pid, task: null });
-      if (tasks.length === 0 && labels.length === 0) units.push({ project: pid, task: null });
-    } else if (tasks.length === 0) {
-      units.push({ project: pid, task: null });
-    } else {
-      for (const t of tasks) units.push({ project: pid, task: t });
-    }
-  }
-  const per = units.length > 0 ? dur / units.length : 0;
-  const byProject = new Map<string, number>();
-  const byTask = new Map<string, number>();
-  for (const u of units) {
-    byProject.set(u.project, (byProject.get(u.project) ?? 0) + per);
-    if (u.task) byTask.set(u.task, (byTask.get(u.task) ?? 0) + per);
-  }
-  return { byProject, byTask };
-}
 
 export function Projects() {
   const { projects, tasksByProject, taskById, assignmentsByTmux, derivedStatusByProjectId, projectsAnchor, loading, createProject } = useProjects();

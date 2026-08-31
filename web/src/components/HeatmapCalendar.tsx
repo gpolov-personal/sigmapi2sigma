@@ -5,7 +5,7 @@ import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
 import { Task } from "../api";
 import { formatDuration } from "../utils";
-import { pomodoroMinutes } from "../lib/pomodoro";
+import { attributePomodoro, pomodoroMinutes } from "../lib/pomodoro";
 
 interface DayCell {
   date: Date;       // local midnight
@@ -19,30 +19,6 @@ interface Props {
   onSelectDay: (date: Date) => void;
 }
 
-// Same attribution formula used elsewhere.
-function attributeProjectMins(p: Pomodoro, taskById: Map<string, Task>): Map<string, number> {
-  const dur = pomodoroMinutes(p);
-  const tasksByProj = new Map<string, string[]>();
-  for (const tid of p.task_ids) {
-    const t = taskById.get(tid);
-    if (!t || !p.project_ids.includes(t.project_id)) continue;
-    const arr = tasksByProj.get(t.project_id);
-    if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
-  }
-  let unitCount = 0;
-  for (const pid of p.project_ids) {
-    const tasks = tasksByProj.get(pid) ?? [];
-    unitCount += tasks.length === 0 ? 1 : tasks.length;
-  }
-  const per = unitCount > 0 ? dur / unitCount : 0;
-  const byProject = new Map<string, number>();
-  for (const pid of p.project_ids) {
-    const tasks = tasksByProj.get(pid) ?? [];
-    const n = tasks.length === 0 ? 1 : tasks.length;
-    byProject.set(pid, (byProject.get(pid) ?? 0) + per * n);
-  }
-  return byProject;
-}
 
 // Mon-Sun layout (ISO style): Monday at the top row.
 const DAYS_OF_WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -88,7 +64,7 @@ export function HeatmapCalendar({ pomodoros, selectedProjectIds, onSelectDay }: 
       const day = startOfLocalDay(new Date(p.started_at));
       const cell = indexByKey.get(day.toDateString());
       if (!cell) continue;
-      const byProj = attributeProjectMins(p, taskById);
+      const { byProject: byProj } = attributePomodoro(p, taskById);
       for (const [pid, mins] of byProj.entries()) {
         if (selectedProjectIds.size > 0 && !selectedProjectIds.has(pid)) continue;
         cell.byProject.set(pid, (cell.byProject.get(pid) ?? 0) + mins);

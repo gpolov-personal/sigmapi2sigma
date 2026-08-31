@@ -5,7 +5,7 @@ import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
 import { Task } from "../api";
 import { formatDuration } from "../utils";
-import { pomodoroMinutes } from "../lib/pomodoro";
+import { attributePomodoro, pomodoroMinutes } from "../lib/pomodoro";
 
 interface Props {
   pomodoros: Pomodoro[];
@@ -15,27 +15,6 @@ interface Props {
   onSelectDay: (date: Date) => void;
 }
 
-function attributeProjectMins(p: Pomodoro, taskById: Map<string, Task>): Map<string, number> {
-  const dur = pomodoroMinutes(p);
-  const tasksByProj = new Map<string, string[]>();
-  for (const tid of p.task_ids) {
-    const t = taskById.get(tid);
-    if (!t || !p.project_ids.includes(t.project_id)) continue;
-    const arr = tasksByProj.get(t.project_id);
-    if (arr) arr.push(tid); else tasksByProj.set(t.project_id, [tid]);
-  }
-  let unitCount = 0;
-  for (const pid of p.project_ids) {
-    unitCount += (tasksByProj.get(pid)?.length ?? 0) || 1;
-  }
-  const per = unitCount > 0 ? dur / unitCount : 0;
-  const byProject = new Map<string, number>();
-  for (const pid of p.project_ids) {
-    const n = (tasksByProj.get(pid)?.length ?? 0) || 1;
-    byProject.set(pid, (byProject.get(pid) ?? 0) + per * n);
-  }
-  return byProject;
-}
 
 const HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -70,7 +49,7 @@ export function MonthGrid({ pomodoros, monthStart, onMonthChange, selectedProjec
     for (const p of pomodoros) {
       const ts = startOfLocalDay(new Date(p.started_at));
       const key = ts.toDateString();
-      const byProj = attributeProjectMins(p, taskById);
+      const { byProject: byProj } = attributePomodoro(p, taskById);
       let cur = m.get(key);
       if (!cur) { cur = { totalMin: 0, perProject: new Map() }; m.set(key, cur); }
       for (const [pid, mins] of byProj.entries()) {

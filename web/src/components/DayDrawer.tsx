@@ -1,6 +1,6 @@
 import { useState, ReactElement } from "react";
 import { X } from "lucide-react";
-import { Pomodoro } from "../api";
+import { Pomodoro, FREE_PROJECT_ID } from "../api";
 import { useSettings } from "../SettingsContext";
 import { useProjects } from "../ProjectsContext";
 import { ProjectChip } from "./ProjectChip";
@@ -78,13 +78,25 @@ export function DayDrawer({ date, pomodoros, onClose }: Props) {
                       for (const pid of p.project_ids) {
                         const proj = projectById.get(pid);
                         const tasks = tasksByProj.get(pid) ?? [];
-                        if (tasks.length === 0) {
+                        // Free carries one-off labels as well as real tasks. Rendering
+                        // only the tasks made this card misreport a mixed pomodoro as
+                        // single-unit, so labels get a chip too, dashed and italic to
+                        // match the Pomodoro page.
+                        const freeLabels = pid === FREE_PROJECT_ID ? (p.freeTaskLabels ?? []) : [];
+                        for (const tid of tasks) {
+                          const t = taskById.get(tid);
+                          out.push(<ProjectChip key={`${pid}:${tid}`} project={proj} task={t ?? null} label={proj ? undefined : "[deleted]"} />);
+                        }
+                        freeLabels.forEach((lbl, i) => {
+                          out.push(
+                            <ProjectChip key={`${pid}:label:${i}`} project={proj}
+                              label={`${proj?.name ?? "Free"} › ${lbl}`}
+                              title={`one-off label · ${lbl}`}
+                              className="border border-dashed border-white/60 italic" />
+                          );
+                        });
+                        if (tasks.length === 0 && freeLabels.length === 0) {
                           out.push(<ProjectChip key={pid} project={proj} label={proj ? undefined : "[deleted]"} />);
-                        } else {
-                          for (const tid of tasks) {
-                            const t = taskById.get(tid);
-                            out.push(<ProjectChip key={`${pid}:${tid}`} project={proj} task={t ?? null} label={proj ? undefined : "[deleted]"} />);
-                          }
                         }
                       }
                       return out;

@@ -43,13 +43,17 @@ So Free tasks were always *creatable*. They were simply never *offered* or *coun
 
 1. **Picker** (`Pomodoro.tsx`) — the Free branch returns `<FreeSlotsEditor>` early, so
    Free's real tasks are never rendered as pickable buttons.
-2. **Attribution** — `attribute()` (Pomodoro.tsx) and `attributeMinutes()` (Projects.tsx)
-   both count `max(1, labels.length)` units for Free and **ignore `tasks` entirely**, so a
-   picked Free task would be silently dropped from the time split and absent from
-   `byTask`.
+2. **Attribution** — the formula was copy-pasted into **four** call sites. `attribute()`
+   (Pomodoro.tsx) and `attributeMinutes()` (Projects.tsx) count `max(1, labels.length)`
+   units for Free and **ignore `tasks` entirely**, so a picked Free task is silently
+   dropped from the time split and absent from `byTask`. The other two —
+   `attributeProjectMins` in `HeatmapCalendar.tsx` and `MonthGrid.tsx` — have **no Free
+   branch at all**, so they already mis-weighted every multi-project Free pomodoro before
+   this change.
 3. **Renderers** — `PomodoroProjectsCell` and `PomodoroDetailDrawer` render Free's labels
-   only. `PomodoroChips` is inconsistent: it renders Free's real tasks, but only when the
-   label array happens to be empty.
+   only. `DayDrawer` (the Calendar day view) renders tasks generically with no Free
+   awareness, so once Free tasks exist it shows them while still hiding the labels.
+   `PomodoroChips` is exported but has **no consumer anywhere** — dead code.
 4. **Manual log modal** — same early return as the picker.
 
 ## Time attribution (the behavioural change)
@@ -68,7 +72,9 @@ appear in the `byTask` breakdown (labels still do not, having no stable ID).
 No existing record is affected: no logged pomodoro can currently carry a Free task,
 because none were ever pickable. There is no migration.
 
-Both mirrored functions must change identically.
+Rather than edit four copies and hope they stay in step, the formula moves to a single
+exported `attributePomodoro()` in `web/src/lib/pomodoro.ts` and all four call sites import
+it. The duplication is what allowed two of them to drift with no Free rule at all.
 
 ## Picker UI
 
@@ -141,6 +147,37 @@ Specifically:
 - `PomodoroDetailDrawer` — `› <task>` lines then `› <label>` lines, labels marked
   `(one-off)`; the `(project-level — no specific task)` line only when both are empty.
 
+## Adjacent defects this exposed
+
+Found by review while verifying the above, and fixed here because the feature is what
+makes them reachable:
+
+- **A refresh mid-pomodoro dropped every picked task.** `pickedTasks`/`pickedProjects`
+  initialised to `[]` while `freeTaskLabels` seeded from the live timer; stop-time then
+  wrote that empty array back over the persisted selections. A Free task picked before
+  Start vanished from the logged record, with no visible hint. Both now seed from
+  `loadActive()`.
+- **`pause`/`resume`/`keepGoing` re-persisted the pre-Start snapshot**, discarding label
+  edits made during the pomodoro. They now fold in the current selections.
+- **The promote path read state through pre-`await` snapshots.** Removing the promoted
+  label by index could delete the wrong row (or resurrect an already-promoted one) when
+  two promotes overlapped, and selecting via a *toggle* could deselect the task on a
+  double fire, dropping the work entirely. Now: remove by value through an updater,
+  idempotent select, and the button disables while in flight.
+- **`FreeSlotsEditor`'s suggestion fold is keyed by row index** and was never reset when a
+  row disappeared, so after a promote it re-pointed at the label that shifted up and
+  picking a suggestion overwrote *that* one. Reset on row-count change (not on content,
+  which would break type-to-filter), and the button blurs before promoting.
+- **The 409 duplicate path could return a completed task id** without reopening it, unlike
+  the found-locally path. The picker hides completed tasks, so the click looked like a
+  no-op. It now fetches the duplicate and reopens it.
+
+### Deliberately not changed
+
+`POST /pomodoros` still accepts a completed task id. Adding a completed-*task* guard to
+mirror the completed-*project* one would break a legitimate flow: logging a past pomodoro
+against a task you have since finished is exactly what the manual-log modal is for.
+
 ## Non-goals (YAGNI)
 
 - No migration of historical labels into tasks. The MRU fold already covers reuse, and
@@ -152,11 +189,15 @@ Specifically:
 
 ## Files touched
 
-- `web/src/pages/Pomodoro.tsx` — `attribute()`, new `FreeProjectPicker` block,
-  `FreeSlotsEditor` gains `onPromote`, `ensureFreeTask` helper, `PomodoroProjectsCell`,
-  `PomodoroChips`, `ManualPomodoroModal`.
-- `web/src/pages/Projects.tsx` — `attributeMinutes()` (mirror of `attribute()`).
-- `web/src/components/PomodoroDetailDrawer.tsx` — Free block.
+- `web/src/lib/pomodoro.ts` — new canonical `attributePomodoro()`.
+- `web/src/pages/Pomodoro.tsx` — new `FreeBlock`, `FreeSlotsEditor` gains
+  `onPromote`/`busy` and a fold reset, `ensureFreeTask`, `selectTask`,
+  `withCurrentSelections`, seeded picker state, `PomodoroProjectsCell`,
+  `ManualPomodoroModal`; `PomodoroChips` deleted.
+- `web/src/pages/Projects.tsx`, `web/src/components/HeatmapCalendar.tsx`,
+  `web/src/components/MonthGrid.tsx` — local formula copies deleted, import the shared one.
+- `web/src/components/PomodoroDetailDrawer.tsx`, `web/src/components/DayDrawer.tsx` — Free
+  blocks render both kinds.
 - `README.md` — Free project description.
 
 No server file changes.
