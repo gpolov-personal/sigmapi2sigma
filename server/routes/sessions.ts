@@ -14,10 +14,11 @@ sessionsRouter.get("/sessions", async (req, res) => {
     return m ? { ...m, accounts: d.accounts } : null;
   }))).filter((m): m is NonNullable<typeof m> => !!m);
 
-  // Anchor = max(mtime) across ALL sessions, regardless of the window filter.
-  // The window is then [anchor - hours*3600*1000, anchor].
+  // Anchor = max(last activity) across ALL sessions, regardless of the window filter.
+  // The window is then [anchor - hours*3600*1000, anchor]. Activity, not mtime:
+  // a metadata-only append (a /rename) must not drag an idle session into the window.
   const anchorMs = allMetas.length > 0
-    ? Math.max(...allMetas.map(m => m.mtime))
+    ? Math.max(...allMetas.map(m => m.lastActivityMs))
     : null;
   const anchorIso = anchorMs !== null ? new Date(anchorMs).toISOString() : null;
 
@@ -26,8 +27,8 @@ sessionsRouter.get("/sessions", async (req, res) => {
     : 0;
 
   const metas = allMetas
-    .filter(m => m.mtime >= cutoff)
-    .sort((a, b) => b.mtime - a.mtime);
+    .filter(m => m.lastActivityMs >= cutoff)
+    .sort((a, b) => b.lastActivityMs - a.lastActivityMs);
 
   const ids = new Set(metas.map(m => m.id));
   const locations = await getLastLocationsBySessionId(ids);

@@ -59,6 +59,13 @@ export interface SessionMeta {
   lastTs: string | null;
   lastUserPrompt: string | null;
   lastUserTs: string | null;
+  /** Name set with Claude Code's /rename; null when never renamed. */
+  customTitle: string | null;
+  /** Claude Code's auto-generated topic title. */
+  aiTitle: string | null;
+  /** Newest message timestamp, falling back to mtime. Use this, not mtime, for
+   *  "last interaction" — a /rename appends metadata and bumps mtime alone. */
+  lastActivityMs: number;
   /** Most recent (claudeSessionId, tmuxSession, window, pane) tuple ever observed for this session. */
   lastTmuxLocation: { tmuxSession: string; windowIndex: number; paneIndex: number; ts: string } | null;
   accounts: string[];
@@ -199,6 +206,8 @@ export interface ConversationActivity {
   allUserPrompts: { ts: string; preview: string }[];
   truncated: boolean;
   durationMinutes: number;
+  customTitle: string | null;
+  aiTitle: string | null;
 }
 
 export interface CommandEntry {

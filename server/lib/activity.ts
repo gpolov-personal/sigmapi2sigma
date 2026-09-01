@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DATA_DIR } from "./pathEncoding.js";
-import { listDedupedSessions, readMessagesInRange, JsonlMessage } from "./jsonl.js";
+import { listDedupedSessions, readMessagesInRange, readSessionMeta, JsonlMessage } from "./jsonl.js";
 
 export interface CommandEntry {
   ts: string;
@@ -22,6 +22,10 @@ export interface ConversationActivity {
   allUserPrompts: { ts: string; preview: string }[];
   truncated: boolean;
   durationMinutes: number;
+  /** Session name (/rename) and Claude Code's auto title. Both live in metadata
+   *  entries outside the pomodoro window, so they come from the session meta. */
+  customTitle: string | null;
+  aiTitle: string | null;
   accounts: string[];
 }
 
@@ -153,6 +157,8 @@ async function buildConversationActivity(
     allUserPrompts: userPrompts,
     truncated: userPromptCount > MAX_PROMPTS,
     durationMinutes,
+    customTitle: null,
+    aiTitle: null,
     accounts: [],
   };
 }
@@ -180,7 +186,16 @@ export async function computeActivitySlice(
       continue;
     }
     const ca = await buildConversationActivity(d.path, sid, fromIso, toIso);
-    if (ca) conversations.push({ ...ca, accounts: d.accounts });
+    if (!ca) continue;
+    // Titles are whole-session metadata, not in-window events; readSessionMeta is
+    // cached on (mtime, size) so this is a map lookup for sessions already scanned.
+    const meta = await readSessionMeta(d.path);
+    conversations.push({
+      ...ca,
+      customTitle: meta?.customTitle ?? null,
+      aiTitle: meta?.aiTitle ?? null,
+      accounts: d.accounts,
+    });
   }
 
   const { commands, installed } = await cmdsP;
