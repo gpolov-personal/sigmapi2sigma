@@ -14,6 +14,10 @@ sessionsRouter.get("/sessions", async (req, res) => {
     return m ? { ...m, accounts: d.accounts } : null;
   }))).filter((m): m is NonNullable<typeof m> => !!m);
 
+  // Note the units are mixed: lastActivityMs is a message timestamp when the tail
+  // had one and a filesystem mtime otherwise, and this machine's clock is not
+  // monotonic (WSL jumps on suspend). A session that falls back to mtime can pull
+  // the anchor forward; that was already true when every input was an mtime.
   // Anchor = max(last activity) across ALL sessions, regardless of the window filter.
   // The window is then [anchor - hours*3600*1000, anchor]. Activity, not mtime:
   // a metadata-only append (a /rename) must not drag an idle session into the window.

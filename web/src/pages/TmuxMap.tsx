@@ -773,14 +773,16 @@ function PaneConversationName({ pane }: { pane: TmuxPane }) {
         </span>
       ) : (
         // Say why it is blank. Without this an empty row reads as a bug rather
-        // than as a conversation whose transcript no longer exists.
+        // than as a conversation there is genuinely no name to show for. Claim
+        // pruning only when no transcript exists at all — one that is merely
+        // unreadable may just be a pane that has not written its first entry.
         <span
           className="text-slate-600"
           title={pane.claudeTranscriptMissing
-            ? "This conversation's transcript is no longer on disk — Claude Code prunes them on its retention schedule — so its name cannot be read."
-            : "This conversation has no name: never renamed with /rename, and Claude Code recorded no auto title."}
+            ? "No transcript file for this conversation under any configured account — most likely pruned by Claude Code's retention schedule, so its name cannot be read."
+            : "No name recorded for this conversation yet: it has not been renamed with /rename, and Claude Code has not written an auto title for it."}
         >
-          {pane.claudeTranscriptMissing ? "— (transcript gone)" : "— (unnamed)"}
+          {pane.claudeTranscriptMissing ? "— (no transcript)" : "— (no name yet)"}
         </span>
       )}
     </div>

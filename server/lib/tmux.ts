@@ -32,9 +32,10 @@ export interface TmuxPane {
   claudeCustomTitle: string | null;
   /** Claude Code's auto-generated topic title for that conversation. */
   claudeAiTitle: string | null;
-  /** True when the conversation's transcript is no longer on disk (Claude Code
-   *  prunes them on its retention schedule), so no name can be read for it.
-   *  Distinguishes "we could not look it up" from "it simply has no name". */
+  /** True only when no transcript file for this conversation exists under any
+   *  configured account — almost always Claude Code's retention having pruned it.
+   *  A transcript that exists but could not be read does NOT set this: it may
+   *  simply not have been written yet. */
   claudeTranscriptMissing: boolean;
   /** Authoritative account (from /proc environ) of the running claude, or null. */
   claudeAccount: string | null;
@@ -125,8 +126,15 @@ async function resolveClaudeSessionId(
  *  failed. Resolving the session id against every account's project dirs covers
  *  all of those, whatever cwd or account the conversation was launched under.
  *
- *  Mutates in place — callers pass trees freshly parsed from disk. Returns
- *  without touching the filesystem when every pane already has a title. */
+ *  Mutates in place — callers pass trees freshly parsed from disk. Skips the
+ *  directory scan entirely when every pane already has a title, which is the
+ *  common live case; a conversation that genuinely has no name is re-resolved on
+ *  every call, since there is nothing to cache it under. That scan is the same
+ *  one /api/sessions already performs per poll.
+ *
+ *  Never throws: these are polled endpoints, and Express 4 does not catch async
+ *  rejections, so a transient fs error must degrade to "no names" rather than
+ *  take the server down. */
 export async function attachConversationTitles(sessions: TmuxSession[]): Promise<void> {
   const pending: TmuxPane[] = [];
   const ids = new Set<string>();
@@ -141,18 +149,23 @@ export async function attachConversationTitles(sessions: TmuxSession[]): Promise
   }
   if (ids.size === 0) return;
 
-  const pathById = new Map((await listDedupedSessions()).map(d => [d.id, d.path]));
   const titles = new Map<string, { customTitle: string | null; aiTitle: string | null }>();
   const missing = new Set<string>();
-  for (const id of ids) {
-    const jsonlPath = pathById.get(id);
-    // No transcript under any configured account: pruned by Claude Code's
-    // retention, or deleted. There is no name to recover, now or later.
-    if (!jsonlPath) { missing.add(id); continue; }
-    const meta = await readSessionMeta(jsonlPath);
-    if (meta) titles.set(id, { customTitle: meta.customTitle, aiTitle: meta.aiTitle });
-    else missing.add(id);
-  }
+  try {
+    const pathById = new Map((await listDedupedSessions()).map(d => [d.id, d.path]));
+    for (const id of ids) {
+      const jsonlPath = pathById.get(id);
+      // No transcript under any configured account: pruned by Claude Code's
+      // retention, or deleted. There is no name to recover, now or later.
+      if (!jsonlPath) { missing.add(id); continue; }
+      // A transcript that exists but reads back empty is left unflagged — it may
+      // be a pane that just launched and has not written its first entry yet.
+      try {
+        const meta = await readSessionMeta(jsonlPath);
+        if (meta) titles.set(id, { customTitle: meta.customTitle, aiTitle: meta.aiTitle });
+      } catch { /* unreadable right now; try again next poll */ }
+    }
+  } catch { return; }
   for (const p of pending) {
     const id = p.claudeSessionId!;
     if (missing.has(id)) { p.claudeTranscriptMissing = true; continue; }
