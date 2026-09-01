@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import { encodeCwd } from "./pathEncoding.js";
 import { loadAccounts } from "./accounts.js";
 import { accountForPanePid } from "./procEnviron.js";
-import { readSessionMeta } from "./jsonl.js";
+import { readSessionMeta, listDedupedSessions } from "./jsonl.js";
 import { readPaneBindings } from "./paneBindings.js";
 import type { PaneBinding } from "./paneBindings.js";
 
@@ -111,6 +111,46 @@ async function resolveClaudeSessionId(
   if (!files.length) return { id: null, source: null };
   files.sort((a, b) => b.mtime - a.mtime);
   return { id: files[0].name.replace(/\.jsonl$/, ""), source: "mtime" };
+}
+
+/** Fill in conversation names for claude panes that don't have one yet.
+ *  buildTmuxTree resolves titles only for *live* panes, and only when the pane's
+ *  account could be read from /proc. Everything else arrives without them: panes
+ *  read back from a snapshot or from saved-tmux.json (serialised before names
+ *  were tracked, or by an older version), and live panes whose account lookup
+ *  failed. Resolving the session id against every account's project dirs covers
+ *  all of those, whatever cwd or account the conversation was launched under.
+ *
+ *  Mutates in place — callers pass trees freshly parsed from disk. Returns
+ *  without touching the filesystem when every pane already has a title. */
+export async function attachConversationTitles(sessions: TmuxSession[]): Promise<void> {
+  const pending: TmuxPane[] = [];
+  const ids = new Set<string>();
+  for (const s of sessions ?? []) {
+    for (const w of s?.windows ?? []) {
+      for (const p of w?.panes ?? []) {
+        if (!p.claudeSessionId || p.claudeCustomTitle || p.claudeAiTitle) continue;
+        pending.push(p);
+        ids.add(p.claudeSessionId);
+      }
+    }
+  }
+  if (ids.size === 0) return;
+
+  const pathById = new Map((await listDedupedSessions()).map(d => [d.id, d.path]));
+  const titles = new Map<string, { customTitle: string | null; aiTitle: string | null }>();
+  for (const id of ids) {
+    const jsonlPath = pathById.get(id);
+    if (!jsonlPath) continue;   // transcript deleted or under an unconfigured account
+    const meta = await readSessionMeta(jsonlPath);
+    if (meta) titles.set(id, { customTitle: meta.customTitle, aiTitle: meta.aiTitle });
+  }
+  for (const p of pending) {
+    const t = titles.get(p.claudeSessionId!);
+    if (!t) continue;
+    p.claudeCustomTitle = t.customTitle;
+    p.claudeAiTitle = t.aiTitle;
+  }
 }
 
 export async function buildTmuxTree(): Promise<TmuxSession[]> {

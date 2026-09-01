@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { buildTmuxTree, isTmuxRunning } from "../lib/tmux.js";
+import { attachConversationTitles, buildTmuxTree, isTmuxRunning } from "../lib/tmux.js";
 import type { TmuxSession } from "../lib/tmux.js";
 import { DATA_DIR } from "../lib/pathEncoding.js";
 import { readSavedTmux, pinSession, forgetSession } from "../lib/savedTmux.js";
@@ -50,6 +50,8 @@ async function findSessionByName(name: string): Promise<{ session: TmuxSession; 
 
 savedTmuxRouter.get("/saved-tmux", async (_req, res) => {
   const file = await readSavedTmux();
+  // Saved sessions are serialised tmux trees, so their panes carry no names.
+  await attachConversationTitles(file.sessions ?? []);
   res.json(file);
 });
 
