@@ -17,9 +17,11 @@ tmuxRouter.get("/tmux", async (_req, res) => {
   const snapshot = snapshots[0] ?? null;
   const tree = live ? await buildTmuxTree() : (snapshot?.sessions ?? []);
   // Dead rows in the map come from the snapshots, which were serialised without
-  // names. One pass covers the live tree and every snapshot; `snapshot` is
-  // snapshots[0] by reference, so it is enriched along with them.
-  await attachConversationTitles([...tree, ...snapshots.flatMap((s: any) => s?.sessions ?? [])]);
+  // names. One pass covers every snapshot plus, when tmux is up, the live tree.
+  // When it is down, `tree` IS snapshots[0].sessions by reference, so including
+  // it again would process those panes twice.
+  const snapshotSessions = snapshots.flatMap((s: any) => s?.sessions ?? []);
+  await attachConversationTitles(live ? [...tree, ...snapshotSessions] : snapshotSessions);
   if (live) {
     const livePaneIds = new Set<string>();
     for (const s of tree) for (const w of s.windows) for (const p of w.panes) livePaneIds.add(p.paneId);

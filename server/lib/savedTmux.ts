@@ -38,6 +38,26 @@ async function writeSavedTmux(data: SavedTmuxFile): Promise<void> {
   await writeJsonAtomic(SAVED_TMUX_FILE, data);
 }
 
+/** Conversation names are derived from the transcript and re-resolved on every
+ *  read. Freezing them into the saved file would pin the name as it was at save
+ *  time: a later /rename would never reach the Saved-for-Later panel, because
+ *  attachConversationTitles skips panes that already carry a title. Blank them
+ *  on the way in so the read path always resolves the current name. */
+export function withoutDerivedTitles(session: TmuxSession): TmuxSession {
+  return {
+    ...session,
+    windows: session.windows.map(w => ({
+      ...w,
+      panes: w.panes.map(p => ({
+        ...p,
+        claudeCustomTitle: null,
+        claudeAiTitle: null,
+        claudeTranscriptMissing: false,
+      })),
+    })),
+  };
+}
+
 /**
  * Pin a session. If a saved entry with the same name already exists, replace it
  * (the user explicitly re-saved it, presumably with fresher data).
@@ -47,9 +67,10 @@ export async function pinSession(
   lastSeenAt: string,
 ): Promise<SavedTmuxFile> {
   const file = await readSavedTmux();
+  const stored = withoutDerivedTitles(session);
   const idx = file.sessions.findIndex(s => s.name === session.name);
-  if (idx >= 0) file.sessions[idx] = session;
-  else file.sessions.push(session);
+  if (idx >= 0) file.sessions[idx] = stored;
+  else file.sessions.push(stored);
   file.meta[session.name] = {
     savedAt: file.meta[session.name]?.savedAt ?? new Date().toISOString(),
     lastSeenAt,
