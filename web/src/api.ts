@@ -87,6 +87,10 @@ export interface TmuxPane {
   /** "binding" = authoritative (SessionStart hook). "mtime" = a guess: newest .jsonl in
    *  the project dir, identical for every pane there, so it cannot tell two apart. */
   claudeSessionSource: "binding" | "mtime" | null;
+  /** Conversation name for this pane. Absent on panes restored from a snapshot
+   *  taken before names were tracked. */
+  claudeCustomTitle: string | null;
+  claudeAiTitle: string | null;
   claudeAccount: string | null;
   claudePermissionMode: string | null;
 }
