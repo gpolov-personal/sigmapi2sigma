@@ -18,7 +18,57 @@ export interface SessionMeta {
   lastTs: string | null;
   lastUserPrompt: string | null;
   lastUserTs: string | null;
+  /** Name set with Claude Code's /rename. Latest wins; null when never renamed. */
+  customTitle: string | null;
+  /** Claude Code's own auto-generated topic title. Most sessions have one. */
+  aiTitle: string | null;
+  /** Last *real* activity: the newest message timestamp, falling back to file mtime.
+   *  Unlike mtime this is not disturbed by metadata-only appends (e.g. /rename). */
+  lastActivityMs: number;
   accounts: string[];   // account names whose dirs hold this UUID; [] until attached by caller
+}
+
+/** Last real activity for a session. Metadata entries (custom-title, ai-title,
+ *  bridge-session, …) carry no timestamp, so they bump mtime without moving
+ *  lastTs — renaming an idle session must not make it look freshly used. */
+export function resolveActivityMs(lastTs: string | null, mtimeMs: number): number {
+  const t = lastTs ? Date.parse(lastTs) : NaN;
+  return Number.isFinite(t) ? t : mtimeMs;
+}
+
+/** Newest title of each kind from transcript lines given in file order.
+ *  Claude Code appends a fresh entry per rename and never rewrites the old one,
+ *  so the last entry present is the current name. */
+export function pickTitles(lines: string[]): { customTitle: string | null; aiTitle: string | null } {
+  let customTitle: string | null = null;
+  let aiTitle: string | null = null;
+  // Backward: first hit is the newest. Title entries are rare, so prefilter on the
+  // type tag and only JSON.parse the candidates.
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (customTitle && aiTitle) break;
+    const line = lines[i];
+    if (!line.includes('"custom-title"') && !line.includes('"ai-title"')) continue;
+    const j = safeParse(line);
+    if (!j) continue;
+    if (!customTitle && j.type === "custom-title" && typeof j.customTitle === "string" && j.customTitle) {
+      customTitle = j.customTitle;
+    }
+    if (!aiTitle && j.type === "ai-title" && typeof j.aiTitle === "string" && j.aiTitle) {
+      aiTitle = j.aiTitle;
+    }
+  }
+  return { customTitle, aiTitle };
+}
+
+/** Claude Code mirrors the current custom title to <projectDir>/<sessionId>/custom-title.json,
+ *  overwriting it on every rename. Used when the rename predates our tail window. */
+async function readTitleSidecar(jsonlPath: string, id: string): Promise<string | null> {
+  const p = path.join(path.dirname(jsonlPath), id, "custom-title.json");
+  try {
+    const raw = JSON.parse(await fs.readFile(p, "utf8"));
+    const t = raw?.customTitle;
+    return typeof t === "string" && t.length > 0 ? t : null;
+  } catch { return null; }
 }
 
 function safeParse(line: string): any | null {
@@ -84,7 +134,7 @@ async function readTail(fd: fsSync.promises.FileHandle, size: number) {
     }
     if (lastTs && lastCwd && lastUserPrompt) break;
   }
-  return { lastTs, lastCwd, lastUserPrompt, lastUserTs };
+  return { lastTs, lastCwd, lastUserPrompt, lastUserTs, ...pickTitles(safeLines) };
 }
 
 const cache = new Map<string, { key: string; value: SessionMeta }>();
@@ -100,7 +150,7 @@ export async function readSessionMeta(jsonlPath: string): Promise<SessionMeta | 
 
   const fd = await fs.open(jsonlPath, "r");
   try {
-    const [{ cwd, gitBranch, version, firstTs, permissionMode }, { lastTs, lastCwd, lastUserPrompt, lastUserTs }] =
+    const [{ cwd, gitBranch, version, firstTs, permissionMode }, { lastTs, lastCwd, lastUserPrompt, lastUserTs, customTitle, aiTitle }] =
       await Promise.all([readHeader(fd, stat.size), readTail(fd, stat.size)]);
 
     const id = path.basename(jsonlPath, ".jsonl");
@@ -120,6 +170,10 @@ export async function readSessionMeta(jsonlPath: string): Promise<SessionMeta | 
       lastTs,
       lastUserPrompt,
       lastUserTs,
+      // A rename older than the tail window survives only in the sidecar.
+      customTitle: customTitle ?? await readTitleSidecar(jsonlPath, id),
+      aiTitle,
+      lastActivityMs: resolveActivityMs(lastTs, stat.mtimeMs),
       accounts: [],
     };
     cache.set(jsonlPath, { key, value: meta });

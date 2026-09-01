@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TmuxResponse } from "../api";
 import { getJSON, SessionMeta, postJSON, apiRequest } from "../api";
-import { relativeTime, trunc, copy } from "../utils";
+import { relativeTime, trunc, copy, sessionTitle } from "../utils";
 import { useProjects } from "../ProjectsContext";
 import { ProjectChip } from "../components/ProjectChip";
 import { AccountBadge } from "../components/AccountBadge";
@@ -61,6 +61,8 @@ export function Sessions() {
     if (!q) return sessions;
     return sessions.filter(s =>
       (s.cwd ?? "").toLowerCase().includes(q) ||
+      (s.customTitle ?? "").toLowerCase().includes(q) ||
+      (s.aiTitle ?? "").toLowerCase().includes(q) ||
       (s.lastUserPrompt ?? "").toLowerCase().includes(q) ||
       s.id.toLowerCase().includes(q)
     );
@@ -90,7 +92,7 @@ export function Sessions() {
           ))}
         </select>
         <input
-          placeholder="filter by path / prompt / id"
+          placeholder="filter by path / name / prompt / id"
           value={filter}
           onChange={e => setFilter(e.target.value)}
           className="bg-slate-800 border border-slate-700 rounded px-3 py-1 text-sm flex-1 min-w-64"
@@ -123,6 +125,7 @@ export function Sessions() {
           <thead className="bg-slate-900 text-slate-400 text-xs uppercase tracking-wide">
             <tr>
               <th className="text-left px-3 py-2 w-2">Live</th>
+              <th className="text-left px-3 py-2">Name</th>
               <th className="text-left px-3 py-2">LWD / CWD</th>
               <th className="text-left px-3 py-2">Branch</th>
               <th className="text-left px-3 py-2">Last interaction</th>
@@ -143,6 +146,9 @@ export function Sessions() {
                     <span className={`inline-block w-2 h-2 rounded-full ${liveLocs && liveLocs.length ? "bg-green-500" : "bg-slate-600"}`}
                           title={liveLocs && liveLocs.length > 1 ? `Running in ${liveLocs.length} panes simultaneously` : ""}/>
                   </td>
+                  <td className="px-3 py-2">
+                    <TitleCell session={s} />
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-300">
                     <div className="flex items-center gap-2 flex-wrap">
                       <CwdCell launchCwd={s.cwd} currentCwd={s.lastCwd} fallback={s.projectDir} />
@@ -150,7 +156,7 @@ export function Sessions() {
                     </div>
                   </td>
                   <td className="px-3 py-2 text-slate-400">{s.gitBranch ?? ""}</td>
-                  <td className="px-3 py-2 text-slate-400 whitespace-nowrap">{relativeTime(s.mtime)}</td>
+                  <td className="px-3 py-2 text-slate-400 whitespace-nowrap">{relativeTime(s.lastActivityMs)}</td>
                   <td className="px-3 py-2 text-slate-300">{trunc(s.lastUserPrompt, 160)}</td>
                   <td className="px-3 py-2 text-xs font-mono text-slate-400 whitespace-nowrap">
                     {liveLocs && liveLocs.length > 0 ? (
@@ -187,7 +193,7 @@ export function Sessions() {
               );
             })}
             {visibleSessions.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-slate-500">No sessions.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-slate-500">No sessions.</td></tr>
             )}
           </tbody>
         </table>
@@ -352,6 +358,20 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
           <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
         </div>
 
+        <Field label="Name">
+          {(() => {
+            const title = sessionTitle(session);
+            if (!title) return <span className="text-slate-500">— (no /rename, no auto title)</span>;
+            return (
+              <>
+                <span className={title.source === "ai" ? "italic text-slate-400" : ""}>{title.text}</span>
+                <span className="text-xs text-slate-500 ml-2">
+                  {title.source === "custom" ? "(/rename)" : "(auto-generated)"}
+                </span>
+              </>
+            );
+          })()}
+        </Field>
         <Field label="Launch WD (LWD)">{session.cwd}</Field>
         <Field label="Current WD (CWD)">
           {session.lastCwd && session.lastCwd !== session.cwd
@@ -511,6 +531,21 @@ function AnchorLine({ anchor, hours }: { anchor: string | null; hours: number })
       Anchor: last interaction <span className="text-slate-300">{fmt(end)}</span> —
       showing sessions <span className="text-slate-300">{fmt(start)}</span> → <span className="text-slate-300">{fmt(end)}</span>
     </div>
+  );
+}
+
+// A /rename shows as-is; Claude Code's auto title is dimmed and italic so the
+// two are never confused at a glance.
+function TitleCell({ session }: { session: SessionMeta }) {
+  const title = sessionTitle(session);
+  if (!title) return <span className="text-slate-600">—</span>;
+  return (
+    <span
+      className={title.source === "custom" ? "text-slate-200" : "text-slate-500 italic"}
+      title={title.source === "custom" ? "Set with /rename" : "Auto-generated by Claude Code"}
+    >
+      {trunc(title.text, 40)}
+    </span>
   );
 }
 

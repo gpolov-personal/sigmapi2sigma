@@ -15,6 +15,16 @@ export async function copy(text: string) {
   try { await navigator.clipboard.writeText(text); } catch {}
 }
 
+/** The name to show for a Claude conversation. A /rename always wins over Claude
+ *  Code's own auto title; the source lets the UI render them distinguishably. */
+export function sessionTitle(
+  s: { customTitle: string | null; aiTitle: string | null }
+): { text: string; source: "custom" | "ai" } | null {
+  if (s.customTitle) return { text: s.customTitle, source: "custom" };
+  if (s.aiTitle) return { text: s.aiTitle, source: "ai" };
+  return null;
+}
+
 export function trunc(s: string | null | undefined, n = 120): string {
   if (!s) return "";
   const oneLine = s.replace(/\s+/g, " ").trim();
