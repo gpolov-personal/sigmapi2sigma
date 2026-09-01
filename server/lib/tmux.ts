@@ -28,6 +28,10 @@ export interface TmuxPane {
    *                surface this rather than presenting it as fact.
    */
   claudeSessionSource: "binding" | "mtime" | null;
+  /** Name set with Claude Code's /rename, for the conversation in this pane. */
+  claudeCustomTitle: string | null;
+  /** Claude Code's auto-generated topic title for that conversation. */
+  claudeAiTitle: string | null;
   /** Authoritative account (from /proc environ) of the running claude, or null. */
   claudeAccount: string | null;
   /** e.g. "bypassPermissions" — used by restore to re-launch with the same permission mode. */
@@ -135,12 +139,16 @@ export async function buildTmuxTree(): Promise<TmuxSession[]> {
         const claudeSessionId = resolved.id;
         let claudeLastCwd: string | null = null;
         let claudePermissionMode: string | null = null;
+        let claudeCustomTitle: string | null = null;
+        let claudeAiTitle: string | null = null;
         if (claudeSessionId) {
           const acc = loadAccounts().find(a => a.name === claudeAccount);
           if (acc) {
             const meta = await readSessionMeta(path.join(acc.projectsDir, encodeCwd(pcwd), `${claudeSessionId}.jsonl`));
             claudeLastCwd = meta?.lastCwd ?? null;
             claudePermissionMode = meta?.permissionMode ?? null;
+            claudeCustomTitle = meta?.customTitle ?? null;
+            claudeAiTitle = meta?.aiTitle ?? null;
           }
         }
         panes.push({
@@ -152,6 +160,8 @@ export async function buildTmuxTree(): Promise<TmuxSession[]> {
           claudeLastCwd,
           claudeSessionId,
           claudeSessionSource: resolved.source,
+          claudeCustomTitle,
+          claudeAiTitle,
           claudeAccount,
           claudePermissionMode,
         });
