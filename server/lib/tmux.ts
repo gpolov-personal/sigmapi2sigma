@@ -32,6 +32,10 @@ export interface TmuxPane {
   claudeCustomTitle: string | null;
   /** Claude Code's auto-generated topic title for that conversation. */
   claudeAiTitle: string | null;
+  /** True when the conversation's transcript is no longer on disk (Claude Code
+   *  prunes them on its retention schedule), so no name can be read for it.
+   *  Distinguishes "we could not look it up" from "it simply has no name". */
+  claudeTranscriptMissing: boolean;
   /** Authoritative account (from /proc environ) of the running claude, or null. */
   claudeAccount: string | null;
   /** e.g. "bypassPermissions" — used by restore to re-launch with the same permission mode. */
@@ -139,14 +143,20 @@ export async function attachConversationTitles(sessions: TmuxSession[]): Promise
 
   const pathById = new Map((await listDedupedSessions()).map(d => [d.id, d.path]));
   const titles = new Map<string, { customTitle: string | null; aiTitle: string | null }>();
+  const missing = new Set<string>();
   for (const id of ids) {
     const jsonlPath = pathById.get(id);
-    if (!jsonlPath) continue;   // transcript deleted or under an unconfigured account
+    // No transcript under any configured account: pruned by Claude Code's
+    // retention, or deleted. There is no name to recover, now or later.
+    if (!jsonlPath) { missing.add(id); continue; }
     const meta = await readSessionMeta(jsonlPath);
     if (meta) titles.set(id, { customTitle: meta.customTitle, aiTitle: meta.aiTitle });
+    else missing.add(id);
   }
   for (const p of pending) {
-    const t = titles.get(p.claudeSessionId!);
+    const id = p.claudeSessionId!;
+    if (missing.has(id)) { p.claudeTranscriptMissing = true; continue; }
+    const t = titles.get(id);
     if (!t) continue;
     p.claudeCustomTitle = t.customTitle;
     p.claudeAiTitle = t.aiTitle;
@@ -202,6 +212,7 @@ export async function buildTmuxTree(): Promise<TmuxSession[]> {
           claudeSessionSource: resolved.source,
           claudeCustomTitle,
           claudeAiTitle,
+          claudeTranscriptMissing: false,
           claudeAccount,
           claudePermissionMode,
         });

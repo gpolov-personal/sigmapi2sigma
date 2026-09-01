@@ -91,6 +91,8 @@ export interface TmuxPane {
    *  taken before names were tracked. */
   claudeCustomTitle: string | null;
   claudeAiTitle: string | null;
+  /** The conversation's transcript is gone from disk, so no name can be read. */
+  claudeTranscriptMissing: boolean;
   claudeAccount: string | null;
   claudePermissionMode: string | null;
 }
