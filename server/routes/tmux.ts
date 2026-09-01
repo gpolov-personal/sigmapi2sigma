@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { buildTmuxTree, capturePane, createDetachedSession, isTmuxRunning } from "../lib/tmux.js";
+import { attachConversationTitles, buildTmuxTree, capturePane, createDetachedSession, isTmuxRunning } from "../lib/tmux.js";
 import { DATA_DIR } from "../lib/pathEncoding.js";
 import { expandHome } from "../lib/paths.js";
 
@@ -15,13 +15,17 @@ tmuxRouter.get("/tmux", async (_req, res) => {
   const live = await isTmuxRunning();
   const snapshots = await readRecentSnapshots();
   const snapshot = snapshots[0] ?? null;
+  const tree = live ? await buildTmuxTree() : (snapshot?.sessions ?? []);
+  // Dead rows in the map come from the snapshots, which were serialised without
+  // names. One pass covers the live tree and every snapshot; `snapshot` is
+  // snapshots[0] by reference, so it is enriched along with them.
+  await attachConversationTitles([...tree, ...snapshots.flatMap((s: any) => s?.sessions ?? [])]);
   if (live) {
-    const tree = await buildTmuxTree();
     const livePaneIds = new Set<string>();
     for (const s of tree) for (const w of s.windows) for (const p of w.panes) livePaneIds.add(p.paneId);
     return res.json({ source: "live", tree, snapshot, snapshots, livePaneIds: [...livePaneIds] });
   }
-  res.json({ source: "snapshot", tree: snapshot?.sessions ?? [], snapshot, snapshots, livePaneIds: [] });
+  res.json({ source: "snapshot", tree, snapshot, snapshots, livePaneIds: [] });
 });
 
 // Create an empty detached tmux session. Used by the project drawer's "Create tmux session" button.
