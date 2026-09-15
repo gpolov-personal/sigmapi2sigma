@@ -9,7 +9,8 @@ import { AccountBadge } from "../components/AccountBadge";
 const HOURS_OPTIONS = [1, 6, 24, 72, 168, 0];
 
 export function Sessions() {
-  const [hours, setHours] = useState<number>(24);
+  // 168h (7 days) by default: a day's window hid conversations worth resuming.
+  const [hours, setHours] = useState<number>(168);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [anchor, setAnchor] = useState<string | null>(null);
   const [tmux, setTmux] = useState<TmuxResponse | null>(null);

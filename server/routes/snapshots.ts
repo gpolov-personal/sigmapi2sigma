@@ -60,8 +60,20 @@ snapshotsRouter.post("/restore", async (req, res) => {
   if (dryRun)  args.push("--dry-run");
   if (force)   args.push("--force");
   if (only) {
-    const safe = String(only).replace(/[^a-zA-Z0-9._-]/g, "");
-    if (safe) args.push("--only", safe);
+    // Reject rather than strip. The old sanitiser silently rewrote the name, so a
+    // session restore.sh could never match ("my session" -> "mysession") came back as
+    // a confusing "not found in snapshot" instead of naming the real problem.
+    const name = String(only);
+    if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+      return res.json({
+        ok: false,
+        exitCode: -1,
+        stdout: "",
+        stderr: "",
+        error: `session name "${name}" contains characters this endpoint will not pass to restore.sh (allowed: letters, digits, . _ -)`,
+      });
+    }
+    args.push("--only", name);
   }
   // Always return HTTP 200; success/failure is conveyed by `ok`. Restore.sh exit 0
   // means at least one success (or nothing to do); exit 1 means total failure.

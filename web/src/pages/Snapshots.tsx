@@ -23,13 +23,20 @@ export function Snapshots() {
     finally { setBusy(false); }
   }
 
-  async function restore(snapshotName: string, dryRun: boolean, force: boolean) {
+  // `only` restores a single tmux session out of the snapshot (all of its windows and
+  // panes, claude --resume included) instead of every session in the file.
+  async function restore(snapshotName: string, dryRun: boolean, force: boolean, only?: string) {
+    if (force && !confirm(
+      only
+        ? `Restore --force "${only}"?\n\nIf a tmux session named "${only}" is running right now it is KILLED first, then rebuilt from ${snapshotName}.`
+        : `Restore --force every session in ${snapshotName}?\n\nAny running tmux session whose name collides is KILLED first, then rebuilt.`
+    )) return;
     setBusy(true);
-    setRestoreLog("Running…");
+    setRestoreLog(only ? `Restoring "${only}" from ${snapshotName}…` : "Running…");
     try {
       const res = await postJSON<{
         ok: boolean; exitCode?: number; stdout?: string; stderr?: string; error?: string;
-      }>("/api/restore", { snapshotName, dryRun, force });
+      }>("/api/restore", { snapshotName, dryRun, force, only });
       const header = res.ok ? "" : `RESTORE FAILED (exit ${res.exitCode ?? "?"})\n\n`;
       setRestoreLog(
         header +
@@ -80,10 +87,24 @@ export function Snapshots() {
                 )].sort();
                 return (
                   <li key={ss.name} className="flex items-center gap-1.5">
-                    <span className="truncate">
+                    <span className="truncate" title={`${ss.windows.length} windows, ${nPanes} panes, ${nClaude} running claude`}>
                       <b>{ss.name}</b> · {ss.windows.length}w · {nPanes}p · {nClaude > 0 ? `${nClaude} claude` : "no claude"}
                     </span>
                     {accounts.length > 0 && <AccountBadge accounts={accounts} />}
+                    <span className="ml-auto flex gap-1 shrink-0">
+                      <button
+                        onClick={() => restore(s.name, false, false, ss.name)}
+                        disabled={busy}
+                        className="px-1.5 py-0.5 bg-blue-600 rounded text-[10px] hover:bg-blue-500 disabled:opacity-50"
+                        title={`Recreate only "${ss.name}" (${ss.windows.length} windows, ${nPanes} panes) from this snapshot`}
+                      >Restore</button>
+                      <button
+                        onClick={() => restore(s.name, false, true, ss.name)}
+                        disabled={busy}
+                        className="px-1.5 py-0.5 bg-red-700 rounded text-[10px] hover:bg-red-600 disabled:opacity-50"
+                        title={`Kill a running "${ss.name}" first, then recreate it`}
+                      >force</button>
+                    </span>
                   </li>
                 );
               })}
