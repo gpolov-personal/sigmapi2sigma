@@ -93,8 +93,19 @@ snapshotsRouter.post("/restore", async (req, res) => {
 
 const VALID_PERM_MODES = new Set(["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"]);
 
+/** True when a tmux session of exactly this name is running. `=` forces an exact
+ *  match; without it "free" would also match "freedom". */
+async function tmuxSessionExists(name: string): Promise<boolean> {
+  try {
+    await pexec("tmux", ["has-session", "-t", `=${name}`]);
+    return true;
+  } catch {
+    return false;   // no server running, or no such session
+  }
+}
+
 snapshotsRouter.post("/resume", async (req, res) => {
-  const { sessionId, cwd, tmuxSessionName, permissionMode, account } = req.body ?? {};
+  const { sessionId, cwd, tmuxSessionName, permissionMode, account, windowName } = req.body ?? {};
   if (!sessionId || !cwd || !tmuxSessionName) {
     return res.status(400).json({ ok: false, error: "sessionId, cwd, tmuxSessionName required" });
   }
@@ -102,6 +113,15 @@ snapshotsRouter.post("/resume", async (req, res) => {
   // a bare UUID — never trust the request body with shell metacharacters.
   if (!/^[0-9a-fA-F-]{36}$/.test(String(sessionId))) {
     return res.status(400).json({ ok: false, error: "sessionId must be a UUID" });
+  }
+  // The name is interpolated into a tmux target ("=free:3"), where ':' and '.' are
+  // the separators. tmux forbids them in session names for the same reason.
+  const sessName = String(tmuxSessionName);
+  if (/[\s.:]/.test(sessName) || sessName.length > 100) {
+    return res.status(400).json({
+      ok: false,
+      error: "tmux session name cannot contain spaces, '.' or ':' (max 100 chars)",
+    });
   }
   const safeMode = permissionMode && VALID_PERM_MODES.has(permissionMode) && permissionMode !== "default"
     ? permissionMode : null;
@@ -114,12 +134,40 @@ snapshotsRouter.post("/resume", async (req, res) => {
   const claudeCmd = safeMode
     ? `${envPrefix}${launchCmd} --permission-mode ${safeMode} --resume ${sessionId}`
     : `${envPrefix}${launchCmd} --resume ${sessionId}`;
+  // A window name keeps a restored pane identifiable in the status bar; tmux also
+  // stops auto-renaming a window once it has an explicit name, so it survives the
+  // claude process starting. Anything tmux cannot render on one line is dropped.
+  const winName = typeof windowName === "string"
+    ? windowName.replace(/[\x00-\x1f]/g, " ").trim().slice(0, 40)
+    : "";
+  const nameArgs = winName ? ["-n", winName] : [];
   try {
-    await pexec("tmux", [
-      "new-session", "-d", "-s", tmuxSessionName, "-c", expandHome(cwd),
-    ]);
-    await pexec("tmux", ["send-keys", "-t", `${tmuxSessionName}:`, claudeCmd, "Enter"]);
-    res.json({ ok: true });
+    // Reuse an existing session by appending a window rather than failing on
+    // "duplicate session": several conversations legitimately belong to one tmux
+    // session. -P -F prints the new window's index, and send-keys MUST target that
+    // index — targeting "<session>:" would type the resume command into whichever
+    // window is currently active, on top of whatever is running there.
+    const exists = await tmuxSessionExists(sessName);
+    const { stdout } = exists
+      ? await pexec("tmux", [
+          "new-window", "-d", "-t", `=${sessName}:`, "-c", expandHome(cwd),
+          ...nameArgs, "-P", "-F", "#{window_index}",
+        ])
+      : await pexec("tmux", [
+          "new-session", "-d", "-s", sessName, "-c", expandHome(cwd),
+          ...nameArgs, "-P", "-F", "#{window_index}",
+        ]);
+    const windowIndex = stdout.trim();
+    if (!/^\d+$/.test(windowIndex)) {
+      throw new Error(`tmux did not report a window index (got ${JSON.stringify(stdout)})`);
+    }
+    await pexec("tmux", ["send-keys", "-t", `=${sessName}:${windowIndex}`, claudeCmd, "Enter"]);
+    res.json({
+      ok: true,
+      tmuxSessionName: sessName,
+      windowIndex: Number(windowIndex),
+      createdSession: !exists,
+    });
   } catch (e: any) {
     res.status(500).json({ ok: false, error: String(e.stderr ?? e.message ?? e) });
   }
