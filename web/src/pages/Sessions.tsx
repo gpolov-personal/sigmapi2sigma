@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { TmuxResponse } from "../api";
-import { getJSON, SessionMeta, postJSON, apiRequest } from "../api";
+import { getJSON, SessionMeta, apiRequest } from "../api";
 import { relativeTime, trunc, copy, sessionTitle } from "../utils";
 import { useProjects } from "../ProjectsContext";
 import { ProjectChip } from "../components/ProjectChip";
@@ -324,17 +324,32 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
     setResuming(true);
     setResumeMsg(null);
     try {
-      await postJSON("/api/resume", {
-        sessionId: session.id,
-        cwd: resumeCwd,
-        tmuxSessionName: tmuxName,
-        permissionMode: session.permissionMode ?? undefined,
-        account: resumeAccount ?? session.accounts[0],
-      });
+      // apiRequest rather than postJSON: a rejected tmux session name comes back as a
+      // 400 with a message worth showing, which postJSON would flatten to "400 Bad Request".
+      const r = await apiRequest<{ windowIndex: number; createdSession: boolean }>(
+        "POST", "/api/resume", {
+          sessionId: session.id,
+          cwd: resumeCwd,
+          tmuxSessionName: tmuxName,
+          permissionMode: session.permissionMode ?? undefined,
+          account: resumeAccount ?? session.accounts[0],
+          // Names the tmux window after the conversation, so a session holding several
+          // resumed chats does not show a row of identical "claude" windows.
+          windowName: sessionTitle(session)?.text,
+        }
+      );
+      if (!r.ok) {
+        setResumeMsg(`Failed: ${(r.body as { error?: string })?.error ?? `HTTP ${r.status}`}`);
+        return;
+      }
+      const { windowIndex, createdSession } = r.body as { windowIndex: number; createdSession: boolean };
       const flag = session.permissionMode && session.permissionMode !== "default"
         ? ` (--permission-mode ${session.permissionMode})`
         : "";
-      setResumeMsg(`Started in tmux session "${tmuxName}" at ${resumeCwd}${flag}.\nAttach with:  tmux attach -t ${tmuxName}`);
+      const opened = createdSession
+        ? `Created tmux session "${tmuxName}"`
+        : `Added window ${windowIndex} to the running tmux session "${tmuxName}"`;
+      setResumeMsg(`${opened} at ${resumeCwd}${flag}.\nAttach with:  tmux attach -t ${tmuxName}:${windowIndex}`);
     } catch (e: any) {
       setResumeMsg(`Failed: ${e.message ?? e}`);
     } finally {
@@ -470,9 +485,9 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
                 onClick={resumeInTmux}
                 disabled={resuming || !tmuxName.trim()}
                 className="px-3 py-1.5 bg-blue-600 rounded text-sm hover:bg-blue-500 disabled:opacity-50"
-                title={`Will launch at ${resumeCwd}`}
+                title={`Will launch at ${resumeCwd}. An existing "${tmuxName}" session gets a new window; it is never disturbed or replaced.`}
               >
-                {resuming ? "Starting…" : "Resume in new tmux"}
+                {resuming ? "Starting…" : "Resume in tmux"}
               </button>
             )}
           </div>
