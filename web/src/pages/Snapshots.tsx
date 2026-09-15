@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getJSON, postJSON, apiRequest, TmuxSession } from "../api";
 import { relativeTime } from "../utils";
 import { AccountBadge } from "../components/AccountBadge";
@@ -15,6 +15,16 @@ export function Snapshots() {
     setSnaps(r.snapshots);
   }
   useEffect(() => { refresh(); }, []);
+
+  // Every Claude account appearing anywhere in the snapshots, so the legend shows the
+  // real badges rather than invented examples.
+  const accountsInSnaps = useMemo(() => [...new Set(
+    snaps.flatMap(s => s.sessions ?? [])
+      .flatMap(ss => ss.windows)
+      .flatMap(w => w.panes)
+      .map(p => p.claudeAccount)
+      .filter((a): a is string => !!a)
+  )].sort(), [snaps]);
 
   async function takeSnapshot() {
     setBusy(true);
@@ -65,6 +75,8 @@ export function Snapshots() {
       {snaps.length === 0 && (
         <div className="text-slate-500 text-sm">No snapshots yet. Click "Snapshot now" or wait for cron.</div>
       )}
+
+      {snaps.length > 0 && <RowLegend accounts={accountsInSnaps} />}
 
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(22rem, 1fr))" }}>
         {snaps.map(s => (
@@ -148,6 +160,26 @@ export function Snapshots() {
       )}
 
       <BackupsSection />
+    </div>
+  );
+}
+
+// A snapshot row reads "free · 2w · 2p · 2 claude [W][P]", which is four different
+// units in a row. The badges in particular were being read as two more counts, so the
+// legend spells every part out once, above the cards.
+function RowLegend({ accounts }: { accounts: string[] }) {
+  return (
+    <div className="border border-slate-800 rounded bg-slate-900/30 px-3 py-2 text-xs text-slate-500 flex flex-wrap items-center gap-x-4 gap-y-1">
+      <span className="text-slate-400">How to read a session row:</span>
+      <span><b className="text-slate-300 font-mono">2w</b> = tmux windows</span>
+      <span><b className="text-slate-300 font-mono">2p</b> = panes across those windows</span>
+      <span><b className="text-slate-300 font-mono">2 claude</b> = panes running a Claude session</span>
+      {accounts.length > 0 && (
+        <span className="inline-flex items-center gap-1.5">
+          <AccountBadge accounts={accounts} />
+          = which Claude account it runs under (from accounts.json). Not a window or pane.
+        </span>
+      )}
     </div>
   );
 }
