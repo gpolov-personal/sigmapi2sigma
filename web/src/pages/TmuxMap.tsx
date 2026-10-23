@@ -286,27 +286,27 @@ export function TmuxMap() {
         )}
         <div className="ml-auto flex items-center gap-2">
           <button onClick={foldAll} disabled={sessions.length === 0}
-            className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs disabled:opacity-40">
+            className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-sm text-xs disabled:opacity-40">
             Fold all
           </button>
           <button onClick={unfoldAll} disabled={sessions.length === 0}
-            className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs disabled:opacity-40">
+            className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-sm text-xs disabled:opacity-40">
             Unfold all
           </button>
-          <button onClick={refresh} className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs">
+          <button onClick={refresh} className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-sm text-xs">
             {loading ? "..." : "Refresh"}
           </button>
         </div>
       </div>
 
       <div className="text-xs text-slate-400 flex flex-wrap gap-4 px-1">
-        <span><span className="inline-block w-3 h-3 rounded-sm border border-green-700 align-middle mr-1"/> alive — currently in tmux</span>
-        <span><span className="inline-block w-3 h-3 rounded-sm border border-red-700 align-middle mr-1"/> dead — tmux is running but this session/pane is gone (came from a snapshot)</span>
-        <span><span className="inline-block w-3 h-3 rounded-sm border border-slate-600 border-dashed align-middle mr-1"/> unknown — tmux server isn't running at all; can't verify</span>
+        <span><span className="inline-block w-3 h-3 rounded-xs border border-green-700 align-middle mr-1"/> alive — currently in tmux</span>
+        <span><span className="inline-block w-3 h-3 rounded-xs border border-red-700 align-middle mr-1"/> dead — tmux is running but this session/pane is gone (came from a snapshot)</span>
+        <span><span className="inline-block w-3 h-3 rounded-xs border border-slate-600 border-dashed align-middle mr-1"/> unknown — tmux server isn't running at all; can't verify</span>
       </div>
 
       {sharedConversations.size > 0 && (
-        <div className="border border-yellow-700 bg-yellow-950/40 rounded p-3 text-sm space-y-2">
+        <div className="border border-yellow-700 bg-yellow-950/40 rounded-sm p-3 text-sm space-y-2">
           <div className="font-semibold text-yellow-300">⚠️ One conversation open in multiple panes</div>
           <div className="text-yellow-200/90 text-xs">
             Two Claude processes are attached to the same conversation and both append to the same transcript. Usually this means a restore or a manual <span className="font-mono">--resume</span> reattached an already-open conversation. Close one pane, or resume a different conversation in it.
@@ -324,7 +324,7 @@ export function TmuxMap() {
       )}
 
       {guessedPanes.size > 0 && (
-        <div className="border border-slate-700 bg-slate-900/60 rounded p-3 text-sm space-y-1">
+        <div className="border border-slate-700 bg-slate-900/60 rounded-sm p-3 text-sm space-y-1">
           <div className="font-semibold text-slate-300">
             ℹ️ {guessedPanes.size} pane{guessedPanes.size === 1 ? "" : "s"} — conversation is a guess
           </div>
@@ -335,7 +335,7 @@ export function TmuxMap() {
       )}
 
       {saved && saved.sessions.length > 0 && (
-        <div className="border border-amber-700/60 bg-amber-950/20 rounded">
+        <div className="border border-amber-700/60 bg-amber-950/20 rounded-sm">
           <div className="px-4 py-2 font-semibold border-b border-amber-800/60 flex items-center gap-3">
             <button
               onClick={() => toggle(KEY_SAVED_SECTION)}
@@ -357,16 +357,16 @@ export function TmuxMap() {
                 ? "border-green-900 bg-slate-900/30"
                 : "border-amber-800/50 bg-amber-950/10";
               return (
-                <div key={s.name} className={`px-4 py-2 border rounded ${entryTone}`}>
+                <div key={s.name} className={`px-4 py-2 border rounded-sm ${entryTone}`}>
                   <div className="flex items-center gap-3 mb-2">
                     <button
                       onClick={() => toggle(keyForSavedEntry(s.name))}
                       className="text-slate-400 hover:text-white w-4"
                     >{collapsed.has(keyForSavedEntry(s.name)) ? "▶" : "▼"}</button>
                     <span className="font-semibold">{s.name}</span>
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-amber-900/40 text-amber-200">saved</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded-sm bg-amber-900/40 text-amber-200">saved</span>
                     {aliveNow && (
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-green-900/40 text-green-300">currently alive</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded-sm bg-green-900/40 text-green-300">currently alive</span>
                     )}
                     <span className="text-xs text-slate-500">
                       {s.windows.length}w · {allPaneIds.length}p
@@ -384,7 +384,7 @@ export function TmuxMap() {
                       <button
                         onClick={() => restoreSaved(s.name, false)}
                         disabled={aliveNow}
-                        className="text-xs px-2 py-0.5 bg-blue-600 rounded hover:bg-blue-500 disabled:opacity-40"
+                        className="text-xs px-2 py-0.5 bg-blue-600 rounded-sm hover:bg-blue-500 disabled:opacity-40"
                         title={aliveNow ? "Already running — kill it first or use --force" : "Recreate the tmux session from the saved data"}
                       >Restore</button>
                       <button
@@ -393,12 +393,12 @@ export function TmuxMap() {
                           s.name,
                           m ? `saved-tmux.json (saved ${relativeTime(new Date(m.savedAt).getTime())})` : "saved-tmux.json"
                         )}
-                        className="text-xs px-2 py-0.5 bg-red-700 rounded hover:bg-red-600"
+                        className="text-xs px-2 py-0.5 bg-red-700 rounded-sm hover:bg-red-600"
                         title="Kill any existing session with this name first"
                       >Restore --force</button>
                       <button
                         onClick={() => forget(s.name)}
-                        className="text-xs px-2 py-0.5 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700"
+                        className="text-xs px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-sm hover:bg-slate-700"
                       >Forget</button>
                     </div>
                   </div>
@@ -443,13 +443,13 @@ export function TmuxMap() {
                                        "bg-slate-800 text-slate-400";
         const isCollapsed = collapsed.has(keyForLiveSession(s.name));
         return (
-          <div key={s.name} className={`border rounded bg-slate-900/30 ${sessionBorder}`}>
+          <div key={s.name} className={`border rounded-sm bg-slate-900/30 ${sessionBorder}`}>
             <div className="px-4 py-2 font-semibold border-b border-slate-800 flex items-center gap-3">
               <button onClick={() => toggle(keyForLiveSession(s.name))} className="text-slate-400 hover:text-white w-4">
                 {isCollapsed ? "▶" : "▼"}
               </button>
               <span>{s.name}</span>
-              <span className={`text-xs px-1.5 py-0.5 rounded ${sessionBadge}`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-sm ${sessionBadge}`}>
                 {sessionState}
               </span>
               <ProjectAssignmentMenu tmuxSessionName={s.name} />
@@ -473,13 +473,13 @@ export function TmuxMap() {
                     {!saved?.sessions.some(x => x.name === s.name) && (
                       <button
                         onClick={() => saveForLater(s.name)}
-                        className="text-xs px-2 py-0.5 bg-amber-700 rounded hover:bg-amber-600"
+                        className="text-xs px-2 py-0.5 bg-amber-700 rounded-sm hover:bg-amber-600"
                         title="Pin this session into ~/.sigmapi2sigma/saved-tmux.json so it survives snapshot rotation"
                       >📌 Save for later</button>
                     )}
                     <button
                       onClick={() => restoreOnly(s.name, false)}
-                      className="text-xs px-2 py-0.5 bg-blue-600 rounded hover:bg-blue-500"
+                      className="text-xs px-2 py-0.5 bg-blue-600 rounded-sm hover:bg-blue-500"
                     >Restore this session</button>
                     <button
                       onClick={() => tryForceRestore(
@@ -489,7 +489,7 @@ export function TmuxMap() {
                           ? `snapshot ${relativeTime(new Date(data.snapshot.ts).getTime())}`
                           : "the latest snapshot"
                       )}
-                      className="text-xs px-2 py-0.5 bg-red-700 rounded hover:bg-red-600"
+                      className="text-xs px-2 py-0.5 bg-red-700 rounded-sm hover:bg-red-600"
                       title="Kill any existing session with this name first"
                     >Restore --force</button>
                   </>
@@ -497,7 +497,7 @@ export function TmuxMap() {
                 {sessionState === "alive" && !saved?.sessions.some(x => x.name === s.name) && (
                   <button
                     onClick={() => tryForceSaveAndKill(s)}
-                    className="text-xs px-2 py-0.5 bg-amber-700 rounded hover:bg-amber-600"
+                    className="text-xs px-2 py-0.5 bg-amber-700 rounded-sm hover:bg-amber-600"
                     title="Pin this session into ~/.sigmapi2sigma/saved-tmux.json AND kill the running tmux session"
                   >📌 Save &amp; kill</button>
                 )}
@@ -545,7 +545,7 @@ export function TmuxMap() {
         <ScrollbackModal
           title={`Pane ${scrollback.paneId} — screen buffer (commands + output, last 500 lines)`}
           paneId={scrollback.paneId}
-          body={<pre className="flex-1 overflow-auto p-4 text-xs whitespace-pre-wrap break-words">{scrollback.text || "(empty)"}</pre>}
+          body={<pre className="flex-1 overflow-auto p-4 text-xs whitespace-pre-wrap wrap-break-word">{scrollback.text || "(empty)"}</pre>}
           onClose={() => setScrollback(null)}
         />
       )}
@@ -585,12 +585,12 @@ export function TmuxMap() {
         />
       )}
       {restoreLog !== null && (
-        <div className="border border-slate-800 rounded bg-slate-950/50 mt-4">
+        <div className="border border-slate-800 rounded-sm bg-slate-950/50">
           <div className="px-3 py-2 text-xs text-slate-500 border-b border-slate-800 flex justify-between">
             <span>restore output</span>
             <button onClick={() => setRestoreLog(null)} className="hover:text-white">clear</button>
           </div>
-          <pre className="p-3 text-xs whitespace-pre-wrap break-words">{restoreLog}</pre>
+          <pre className="p-3 text-xs whitespace-pre-wrap wrap-break-word">{restoreLog}</pre>
         </div>
       )}
       {forceConfirm && (
@@ -634,7 +634,7 @@ function SaveKillConfirmModal({ name, liveSession, onCancel, onConfirm }: {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onCancel}>
       <div
         onClick={e => e.stopPropagation()}
-        className="bg-slate-900 border border-amber-700 rounded p-6 max-w-2xl w-full mx-4"
+        className="bg-slate-900 border border-amber-700 rounded-sm p-6 max-w-2xl w-full mx-4"
       >
         <h2 className="text-lg font-semibold text-amber-300 mb-3">Save and kill running tmux session?</h2>
         <p className="text-sm mb-2">
@@ -657,11 +657,11 @@ function SaveKillConfirmModal({ name, liveSession, onCancel, onConfirm }: {
         <div className="flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm hover:bg-slate-700"
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-sm text-sm hover:bg-slate-700"
           >Cancel</button>
           <button
             onClick={onConfirm}
-            className="px-3 py-1.5 bg-amber-700 rounded text-sm hover:bg-amber-600"
+            className="px-3 py-1.5 bg-amber-700 rounded-sm text-sm hover:bg-amber-600"
           >Save &amp; kill</button>
         </div>
       </div>
@@ -686,12 +686,12 @@ function PaneCard({ pane, state, sharedConv, onCapture, onCommands }:
                           <span className="text-xs text-slate-500">unknown</span>;
 
   return (
-    <div className={`border rounded p-3 ${bg} ${baseBorder}`}>
+    <div className={`border rounded-sm p-3 ${bg} ${baseBorder}`}>
       <div className="flex items-center justify-between mb-1">
         <div className="flex items-center gap-2">
           {isClaude && (
             <span
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-cyan-600/30 text-cyan-200 border border-cyan-700"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-xs font-semibold bg-cyan-600/30 text-cyan-200 border border-cyan-700"
               title="Claude Code is running in this pane"
             >
               <BrainCircuit size={12} /> CLAUDE
@@ -733,7 +733,7 @@ function PaneCard({ pane, state, sharedConv, onCapture, onCommands }:
       <div className="mt-2 flex gap-2 flex-wrap">
         <button
           onClick={onCommands}
-          className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs hover:bg-slate-700"
+          className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-sm text-xs hover:bg-slate-700"
           title="Commands recorded by the preexec hook (works for dead panes too)"
         >
           Commands
@@ -741,7 +741,7 @@ function PaneCard({ pane, state, sharedConv, onCapture, onCommands }:
         {onCapture && (
           <button
             onClick={onCapture}
-            className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs hover:bg-slate-700"
+            className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-sm text-xs hover:bg-slate-700"
             title="Raw scrollback: commands + output interleaved"
           >
             Screen buffer
@@ -826,7 +826,7 @@ function ScrollbackModal({ title, body, onClose }:
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-6" onClick={onClose}>
       <div
         onClick={e => e.stopPropagation()}
-        className="w-[80rem] max-w-full max-h-[90vh] bg-slate-900 border border-slate-800 rounded flex flex-col"
+        className="w-7xl max-w-full max-h-[90vh] bg-slate-900 border border-slate-800 rounded-sm flex flex-col"
       >
         <div className="flex justify-between items-center px-4 py-2 border-b border-slate-800">
           <div className="font-mono text-sm">{title}</div>
@@ -860,7 +860,7 @@ function ForceConfirmModal({ ctx, onCancel, onConfirm }: {
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onCancel}>
       <div
         onClick={e => e.stopPropagation()}
-        className="bg-slate-900 border border-red-700 rounded p-6 max-w-2xl w-full mx-4"
+        className="bg-slate-900 border border-red-700 rounded-sm p-6 max-w-2xl w-full mx-4"
       >
         <h2 className="text-lg font-semibold text-red-300 mb-3">Replace running tmux session?</h2>
         <p className="text-sm mb-2">
@@ -880,11 +880,11 @@ function ForceConfirmModal({ ctx, onCancel, onConfirm }: {
         <div className="flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm hover:bg-slate-700"
+            className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-sm text-sm hover:bg-slate-700"
           >Cancel</button>
           <button
             onClick={onConfirm}
-            className="px-3 py-1.5 bg-red-700 rounded text-sm hover:bg-red-600"
+            className="px-3 py-1.5 bg-red-700 rounded-sm text-sm hover:bg-red-600"
           >Replace</button>
         </div>
       </div>

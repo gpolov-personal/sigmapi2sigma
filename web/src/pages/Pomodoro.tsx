@@ -149,7 +149,7 @@ function FreeSlotsEditor({ labels, onChange, placeholder, suggestions = [], onPr
               onKeyDown={e => onKey(i, e)}
               placeholder={placeholder ?? "What are you working on?"}
               maxLength={200}
-              className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-[11px]"
+              className="flex-1 min-w-64 bg-slate-800 border border-slate-700 rounded-sm px-2 py-0.5 text-[11px]"
             />
             {onPromote && label.trim().length > 0 && (
               // blur before promoting: this row is about to be removed, and because rows
@@ -166,7 +166,7 @@ function FreeSlotsEditor({ labels, onChange, placeholder, suggestions = [], onPr
                 className="text-slate-500 hover:text-red-400 px-1 shrink-0"><X size={12} /></button>
             )}
             {cur && (
-              <div className="absolute z-30 top-full left-5 mt-1 w-72 max-h-48 overflow-y-auto bg-slate-800 border border-slate-700 rounded shadow-lg">
+              <div className="absolute z-30 top-full left-5 mt-1 w-72 max-h-48 overflow-y-auto bg-slate-800 border border-slate-700 rounded-sm shadow-lg">
                 {opts.length === 0 ? (
                   <div className="px-2 py-1 text-[11px] text-slate-500 italic">No matching recent labels</div>
                 ) : opts.map((s, j) => (
@@ -277,7 +277,7 @@ function FreeBlock({
             <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
               {tasks.map(t => (
                 <button key={t.id} type="button" onClick={() => onToggleTask?.(t.id)}
-                  className={`px-1.5 py-0.5 rounded text-[11px] border ${picked.includes(t.id) ? "border-white bg-slate-700" : "border-slate-700 hover:bg-slate-800"}`}
+                  className={`px-1.5 py-0.5 rounded-sm text-[11px] border ${picked.includes(t.id) ? "border-white bg-slate-700" : "border-slate-700 hover:bg-slate-800"}`}
                 >{t.name}</button>
               ))}
               {onEnsureTask && (adding ? (
@@ -297,7 +297,7 @@ function FreeBlock({
                   onBlur={() => { if (!draft.trim()) { setAdding(false); setErr(null); } }}
                   placeholder="New Free task…"
                   maxLength={200}
-                  className="w-40 bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-[11px]"
+                  className="w-40 bg-slate-800 border border-slate-700 rounded-sm px-1.5 py-0.5 text-[11px]"
                 />
               ) : (
                 <button type="button" onClick={() => setAdding(true)}
@@ -316,7 +316,7 @@ function FreeBlock({
           onPromote={onEnsureTask ? promote : undefined}
           busy={busy}
         />
-        {err && <div className="text-[11px] text-red-400 pl-[4.5rem]">{err}</div>}
+        {err && <div className="text-[11px] text-red-400 pl-18">{err}</div>}
       </div>
     </div>
   );
@@ -696,7 +696,7 @@ export function PomodoroPage() {
   return (
     <div className="space-y-6">
       {/* Live timer / rest block (single source of truth on the page) */}
-      <div className={`border rounded p-4 ${postFlow?.stage === "rest" ? "border-amber-700 bg-amber-950/20" : "border-slate-800 bg-slate-900/50"}`}>
+      <div className={`border rounded-sm p-4 ${postFlow?.stage === "rest" ? "border-amber-700 bg-amber-950/20" : "border-slate-800 bg-slate-900/50"}`}>
         {postFlow?.stage === "rest" ? (
           // ─── RESTING ───────────────────────────────────────────
           <>
@@ -711,16 +711,16 @@ export function PomodoroPage() {
               </div>
               <div className="flex-1" />
               {restIsPaused ? (
-                <button onClick={resumeRest} className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-700 hover:bg-green-600 rounded text-sm text-white">
+                <button onClick={resumeRest} className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-700 hover:bg-green-600 rounded-sm text-sm text-white">
                   <Play size={14} /> Resume
                 </button>
               ) : (
-                <button onClick={pauseRest} className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded text-sm text-white">
+                <button onClick={pauseRest} className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded-sm text-sm text-white">
                   <Pause size={14} /> Pause
                 </button>
               )}
               <button onClick={skipRest}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white">Skip rest</button>
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white">Skip rest</button>
               <button onClick={cancelRest}
                 className="px-2 py-1.5 text-xs text-slate-400 hover:text-white">cancel</button>
             </div>
@@ -754,7 +754,7 @@ export function PomodoroPage() {
               {!active && (
                 <input type="number" min={1} max={180} value={duration}
                   onChange={e => setDuration(Math.max(1, Math.min(180, Number(e.target.value))))}
-                  className="w-20 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+                  className="w-20 bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
                   title="duration in minutes"
                 />
               )}
@@ -767,20 +767,20 @@ export function PomodoroPage() {
               <div className="flex-1" />
               {!active ? (
                 <button onClick={startTimer} disabled={pickedProjects.length === 0}
-                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white disabled:opacity-50">Start</button>
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white disabled:opacity-50">Start</button>
               ) : (
                 <>
-                  <button onClick={keepGoing} disabled={isPaused} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm disabled:opacity-40">Keep going (+{settings.defaultPomodoroDuration}m)</button>
+                  <button onClick={keepGoing} disabled={isPaused} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-sm text-sm disabled:opacity-40">Keep going (+{settings.defaultPomodoroDuration}m)</button>
                   {isPaused ? (
-                    <button onClick={resumeTimer} className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-700 hover:bg-green-600 rounded text-sm text-white">
+                    <button onClick={resumeTimer} className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-700 hover:bg-green-600 rounded-sm text-sm text-white">
                       <Play size={14} /> Resume
                     </button>
                   ) : (
-                    <button onClick={pauseTimer} className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded text-sm text-white">
+                    <button onClick={pauseTimer} className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded-sm text-sm text-white">
                       <Pause size={14} /> Pause
                     </button>
                   )}
-                  <button onClick={stopTimer} className="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded text-sm text-white">Stop</button>
+                  <button onClick={stopTimer} className="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-sm text-sm text-white">Stop</button>
                   <button onClick={discardActive} title="Discard without saving" className="px-2 py-1.5 text-xs text-slate-500 hover:text-white">discard</button>
                 </>
               )}
@@ -868,7 +868,7 @@ export function PomodoroPage() {
                       <span className="text-xs" style={{ color: proj?.color }}>{proj?.name ?? "?"}:</span>
                       {tasksForP.map(t => (
                         <button key={t.id} onClick={() => toggleTask(t.id)}
-                          className={`px-1.5 py-0.5 rounded text-[11px] border ${pickedTasks.includes(t.id) ? "border-white bg-slate-700" : "border-slate-700 hover:bg-slate-800"}`}
+                          className={`px-1.5 py-0.5 rounded-sm text-[11px] border ${pickedTasks.includes(t.id) ? "border-white bg-slate-700" : "border-slate-700 hover:bg-slate-800"}`}
                         >{t.name}</button>
                       ))}
                     </div>
@@ -906,7 +906,7 @@ export function PomodoroPage() {
       </div>
 
       {/* Today summary */}
-      <div className="border border-slate-800 rounded p-4 bg-slate-900/30">
+      <div className="border border-slate-800 rounded-sm p-4 bg-slate-900/30">
         <div className="flex items-center gap-4">
           <div className="text-sm text-slate-400">Today</div>
           <div className="text-lg font-mono">{formatDuration(todayMinutes, settings.workdayHours)}</div>
@@ -920,7 +920,7 @@ export function PomodoroPage() {
               const p = projectById.get(pid);
               return (
                 <span key={pid} className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: p?.color ?? "#475569" }} />
+                  <span className="w-2 h-2 rounded-xs" style={{ backgroundColor: p?.color ?? "#475569" }} />
                   <span className="text-slate-300">{p?.name ?? "[deleted]"}</span>
                   <span className="text-slate-500">{formatDuration(mins, settings.workdayHours)}</span>
                 </span>
@@ -936,7 +936,7 @@ export function PomodoroPage() {
               const p = t ? projectById.get(t.project_id) : null;
               return (
                 <span key={tid} className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: p?.color ?? "#475569" }} />
+                  <span className="w-2 h-2 rounded-xs" style={{ backgroundColor: p?.color ?? "#475569" }} />
                   <span className="text-slate-300">{t?.name ?? "[deleted]"}</span>
                   <span className="text-slate-500">{formatDuration(mins, settings.workdayHours)}</span>
                 </span>
@@ -948,7 +948,7 @@ export function PomodoroPage() {
 
       <div>
         <button onClick={() => setShowManual(true)}
-          className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded text-sm"
+          className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-sm text-sm"
         ><Plus size={14} /> Log past pomodoro</button>
       </div>
 
@@ -958,13 +958,13 @@ export function PomodoroPage() {
           <div className="text-sm text-slate-400">Recent ({pomodoros.length} total)</div>
           <div className="ml-auto flex items-center gap-2 text-xs">
             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-              className="px-2 py-1 bg-slate-800 border border-slate-700 rounded disabled:opacity-40">← Newer</button>
+              className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-sm disabled:opacity-40">← Newer</button>
             <span className="text-slate-500">page {page + 1} / {totalPages}</span>
             <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}
-              className="px-2 py-1 bg-slate-800 border border-slate-700 rounded disabled:opacity-40">Older →</button>
+              className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-sm disabled:opacity-40">Older →</button>
           </div>
         </div>
-        <div className="border border-slate-800 rounded overflow-hidden">
+        <div className="border border-slate-800 rounded-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-900 text-slate-400 text-xs uppercase">
               <tr>
@@ -1131,22 +1131,22 @@ function NotesAndNextModal({ pomodoro, restMinutes, onCancel, onTakeRest, onCont
   async function call(fn: (n: string) => void) { setBusy(true); try { fn(notes); } finally { setBusy(false); } }
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
-      <div className="bg-slate-900 border border-slate-700 rounded w-full max-w-md p-6 space-y-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-sm w-full max-w-md p-6 space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-semibold">Pomodoro complete</h2>
           <button onClick={onCancel} className="text-slate-400"><X size={18} /></button>
         </div>
         <textarea autoFocus value={notes} onChange={e => setNotes(e.target.value)}
           placeholder="Notes (optional)…" rows={3}
-          className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+          className="w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
         />
         <div className="text-sm text-slate-300">What's next?</div>
         <div className="flex flex-col gap-2">
           <button disabled={busy} onClick={() => call(onTakeRest)}
-            className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white"
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white"
           ><Coffee size={16} /> Take a {restMinutes}-min rest</button>
           <button disabled={busy} onClick={() => call(onContinueNow)}
-            className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-sm text-sm"
           ><Play size={16} /> Start same pomodoro now</button>
           <button disabled={busy} onClick={onCancel}
             className="px-3 py-2 text-sm text-slate-400 hover:text-white"
@@ -1166,12 +1166,12 @@ function _RestModal({ remainingMs, totalMinutes, onSkip, onCancel }: {
 }) {
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
-      <div className="bg-slate-900 border border-slate-700 rounded w-full max-w-sm p-6 space-y-4 text-center">
+      <div className="bg-slate-900 border border-slate-700 rounded-sm w-full max-w-sm p-6 space-y-4 text-center">
         <div className="flex items-center justify-center gap-2 text-slate-300"><Coffee size={18} /> Resting</div>
         <div className="font-mono text-4xl tabular-nums">{fmtMmSs(remainingMs)}</div>
         <div className="text-xs text-slate-500">of {totalMinutes} min</div>
         <div className="flex flex-col gap-2 pt-2">
-          <button onClick={onSkip} className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white">Skip rest</button>
+          <button onClick={onSkip} className="px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white">Skip rest</button>
           <button onClick={onCancel} className="px-3 py-2 text-sm text-slate-400 hover:text-white">Cancel — let me reconfigure</button>
         </div>
       </div>
@@ -1189,7 +1189,7 @@ function RestartPromptModal({ proposal, onContinue, onCancel }: {
   const taskNames = proposal.taskIds.map(id => taskById.get(id)?.name ?? "?").join(", ");
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6">
-      <div className="bg-slate-900 border border-slate-700 rounded w-full max-w-md p-6 space-y-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-sm w-full max-w-md p-6 space-y-4">
         <h2 className="text-lg font-semibold">Rest finished</h2>
         <div className="text-sm text-slate-300">Start another pomodoro with the same projects/tasks?</div>
         <div className="text-xs text-slate-400">
@@ -1197,7 +1197,7 @@ function RestartPromptModal({ proposal, onContinue, onCancel }: {
         </div>
         <div className="flex flex-col gap-2 pt-2">
           <button onClick={onContinue}
-            className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white"
+            className="inline-flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white"
           ><Play size={16} /> Start same pomodoro now</button>
           <button onClick={onCancel} className="px-3 py-2 text-sm text-slate-400 hover:text-white">Cancel — let me reconfigure</button>
         </div>
@@ -1263,7 +1263,7 @@ function ManualPomodoroModal({ onClose, onSaved, projects, freeLabelSuggestions,
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded w-full max-w-md p-6 space-y-4">
+      <div onClick={e => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-sm w-full max-w-md p-6 space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-semibold">Log past pomodoro</h2>
           <button onClick={onClose} className="text-slate-400"><X size={18} /></button>
@@ -1271,12 +1271,12 @@ function ManualPomodoroModal({ onClose, onSaved, projects, freeLabelSuggestions,
         <label className="block">
           <span className="text-sm text-slate-300">Start</span>
           <input type="datetime-local" value={start} onChange={e => setStart(e.target.value)}
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm" />
         </label>
         <label className="block">
           <span className="text-sm text-slate-300">End</span>
           <input type="datetime-local" value={end} onChange={e => setEnd(e.target.value)}
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm" />
         </label>
         <div>
           <span className="text-sm text-slate-300">Projects</span>
@@ -1284,7 +1284,7 @@ function ManualPomodoroModal({ onClose, onSaved, projects, freeLabelSuggestions,
             {projects.length === 0 && <span className="text-xs text-slate-500">No projects available.</span>}
             {projects.map(p => (
               <button key={p.id} onClick={() => toggleProject(p.id)}
-                className={`px-2 py-0.5 rounded text-xs border ${projectIds.includes(p.id) ? "border-white" : "border-transparent opacity-70"}`}
+                className={`px-2 py-0.5 rounded-sm text-xs border ${projectIds.includes(p.id) ? "border-white" : "border-transparent opacity-70"}`}
                 style={{ backgroundColor: p.color, color: "#fff" }}
               >{p.name}</button>
             ))}
@@ -1317,7 +1317,7 @@ function ManualPomodoroModal({ onClose, onSaved, projects, freeLabelSuggestions,
                     <span className="text-xs" style={{ color: proj?.color }}>{proj?.name}:</span>
                     {tasks.map(t => (
                       <button key={t.id} onClick={() => toggleTask(t.id)}
-                        className={`px-1.5 py-0.5 rounded text-[11px] border ${taskIds.includes(t.id) ? "border-white bg-slate-700" : "border-slate-700"}`}
+                        className={`px-1.5 py-0.5 rounded-sm text-[11px] border ${taskIds.includes(t.id) ? "border-white bg-slate-700" : "border-slate-700"}`}
                       >{t.name}</button>
                     ))}
                   </div>
@@ -1329,12 +1329,12 @@ function ManualPomodoroModal({ onClose, onSaved, projects, freeLabelSuggestions,
         <label className="block">
           <span className="text-sm text-slate-300">Notes</span>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm" />
         </label>
         {error && <div className="text-sm text-red-400">{error}</div>}
         <div className="flex gap-2">
-          <button onClick={save} disabled={busy} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white disabled:opacity-50">Save</button>
-          <button onClick={onClose} className="px-3 py-1.5 bg-slate-700 rounded text-sm">Cancel</button>
+          <button onClick={save} disabled={busy} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white disabled:opacity-50">Save</button>
+          <button onClick={onClose} className="px-3 py-1.5 bg-slate-700 rounded-sm text-sm">Cancel</button>
         </div>
       </div>
     </div>

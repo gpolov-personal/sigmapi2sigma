@@ -30,9 +30,9 @@ export function ShellHistory() {
 
   if (!installed) {
     return (
-      <div className="border border-amber-800 bg-amber-950/40 rounded p-4 text-sm space-y-2">
+      <div className="border border-amber-800 bg-amber-950/40 rounded-sm p-4 text-sm space-y-2">
         <p><b>Shell hook not installed.</b> Per-tmux-pane command history is empty.</p>
-        <p>Install with: <code className="bg-slate-900 px-2 py-0.5 rounded">npm run install-shell-hook</code></p>
+        <p>Install with: <code className="bg-slate-900 px-2 py-0.5 rounded-sm">npm run install-shell-hook</code></p>
         <p className="text-slate-400 text-xs">The hook appends to <code>~/.zshrc</code>, prints the diff first. Only logs while inside tmux.</p>
       </div>
     );
@@ -42,7 +42,7 @@ export function ShellHistory() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <Label>Last days</Label>
-        <select value={days} onChange={e => setDays(Number(e.target.value))} className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+        <select value={days} onChange={e => setDays(Number(e.target.value))} className="bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm">
           {[1, 3, 7, 14, 30, 60].map(d => <option key={d} value={d}>{d}</option>)}
         </select>
         <Input placeholder="tmux session" value={tmuxSession} onChange={setTmuxSession} />
@@ -52,7 +52,7 @@ export function ShellHistory() {
         <span className="text-xs text-slate-500">{entries.length} entries {loading ? "…" : ""}</span>
       </div>
 
-      <div className="border border-slate-800 rounded overflow-hidden">
+      <div className="border border-slate-800 rounded-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-900 text-slate-400 text-xs uppercase">
             <tr>
@@ -90,7 +90,7 @@ function Input(p: { placeholder: string; value: string; onChange: (v: string) =>
       placeholder={p.placeholder}
       value={p.value}
       onChange={e => p.onChange(e.target.value)}
-      className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+      className="bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
     />
   );
 }

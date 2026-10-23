@@ -59,7 +59,7 @@ export function DayDrawer({ date, pomodoros, onClose }: Props) {
                 <button
                   key={p.id}
                   onClick={() => setSelectedId(p.id)}
-                  className="w-full text-left border border-slate-800 rounded p-3 bg-slate-950/40 hover:bg-slate-900/60"
+                  className="w-full text-left border border-slate-800 rounded-sm p-3 bg-slate-950/40 hover:bg-slate-900/60"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-sm font-mono">{fmt(start)} – {fmt(end)}</div>

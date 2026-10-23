@@ -55,7 +55,7 @@ export function ProjectAssignmentMenu({ tmuxSessionName, className }: Props) {
         <ChevronDown size={12} className="text-slate-400" />
       </button>
       {open && (
-        <div className="absolute z-40 mt-1 min-w-[14rem] max-h-72 overflow-auto bg-slate-800 border border-slate-700 rounded shadow-lg">
+        <div className="absolute z-40 mt-1 min-w-56 max-h-72 overflow-auto bg-slate-800 border border-slate-700 rounded-sm shadow-lg">
           {currentProjectId && (
             <button
               onClick={() => handlePick(null)}
@@ -73,7 +73,7 @@ export function ProjectAssignmentMenu({ tmuxSessionName, className }: Props) {
               onClick={() => handlePick(p.id)}
               className="w-full text-left px-3 py-1.5 text-sm hover:bg-slate-700 flex items-center gap-2"
             >
-              <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: p.color }} />
+              <span className="w-2.5 h-2.5 rounded-xs" style={{ backgroundColor: p.color }} />
               <span className="text-slate-200">{p.name}</span>
             </button>
           ))}

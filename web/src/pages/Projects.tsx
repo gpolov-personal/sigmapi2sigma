@@ -120,7 +120,7 @@ export function Projects() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => setCreating(true)}
-          className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white"
+          className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white"
         >
           <Plus size={14} /> New Project
         </button>
@@ -128,7 +128,7 @@ export function Projects() {
           placeholder="Search…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+          className="bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
         />
         <div className="ml-auto flex items-center gap-4">
           <label className="flex items-center gap-2 text-sm text-slate-400">
@@ -171,30 +171,30 @@ export function Projects() {
 
       {grouped.parkedVisible.length > 0 && (
         <>
-          <div className="text-sm text-slate-400 mt-6">Parked ({grouped.parkedVisible.length})</div>
+          <div className="text-sm text-slate-400">Parked ({grouped.parkedVisible.length})</div>
           {renderGrid(grouped.parkedVisible)}
         </>
       )}
 
       {showCompleted && grouped.completed.length > 0 && (
         <>
-          <div className="text-sm text-slate-400 mt-6">Completed ({grouped.completed.length})</div>
+          <div className="text-sm text-slate-400">Completed ({grouped.completed.length})</div>
           {renderGrid(grouped.completed)}
         </>
       )}
 
       {showHidden && hiddenCount > 0 && (
         <>
-          <div className="text-sm text-slate-300 mt-8 font-medium">Hidden</div>
+          <div className="text-sm text-slate-300 font-medium">Hidden</div>
           {grouped.hiddenActive.length > 0 && (
             <>
-              <div className="text-xs text-slate-500 mt-2 ml-1">Active ({grouped.hiddenActive.length})</div>
+              <div className="text-xs text-slate-500 ml-1">Active ({grouped.hiddenActive.length})</div>
               {renderGrid(grouped.hiddenActive)}
             </>
           )}
           {grouped.hiddenParked.length > 0 && (
             <>
-              <div className="text-xs text-slate-500 mt-2 ml-1">Parked ({grouped.hiddenParked.length})</div>
+              <div className="text-xs text-slate-500 ml-1">Parked ({grouped.hiddenParked.length})</div>
               {renderGrid(grouped.hiddenParked)}
             </>
           )}
@@ -240,7 +240,7 @@ function ProjectCard({ project, tasks, derivedStatus, stats, minsByTask, onClick
   return (
     <button
       onClick={onClick}
-      className="text-left border rounded bg-slate-900/40 hover:bg-slate-900/70 p-4 flex flex-col gap-2 border-slate-800"
+      className="text-left border rounded-sm bg-slate-900/40 hover:bg-slate-900/70 p-4 flex flex-col gap-2 border-slate-800"
       style={{ borderLeft: `5px solid ${project.color}` }}
     >
       <div className="flex items-center gap-2 flex-wrap">
@@ -255,7 +255,7 @@ function ProjectCard({ project, tasks, derivedStatus, stats, minsByTask, onClick
       {project.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {project.tags.map(tag => (
-            <span key={tag} className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded text-slate-300">{tag}</span>
+            <span key={tag} className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded-sm text-slate-300">{tag}</span>
           ))}
         </div>
       )}
@@ -329,7 +329,7 @@ function CreateProjectModal({ onClose, onCreate }: {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-6" onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded w-full max-w-md p-6 space-y-4">
+      <div onClick={e => e.stopPropagation()} className="bg-slate-900 border border-slate-700 rounded-sm w-full max-w-md p-6 space-y-4">
         <div className="flex justify-between items-center">
           <h2 className="text-lg font-semibold">New Project</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white"><X size={18} /></button>
@@ -338,7 +338,7 @@ function CreateProjectModal({ onClose, onCreate }: {
           <span className="text-sm text-slate-300">Name</span>
           <input
             autoFocus value={name} onChange={e => setName(e.target.value)}
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
           />
         </label>
         <label className="block">
@@ -346,13 +346,13 @@ function CreateProjectModal({ onClose, onCreate }: {
           <div className="mt-1 flex flex-wrap gap-1">
             {PROJECT_PALETTE.map(c => (
               <button key={c} onClick={() => setColor(c)}
-                className={`w-6 h-6 rounded ${color === c ? "ring-2 ring-white" : ""}`}
+                className={`w-6 h-6 rounded-sm ${color === c ? "ring-2 ring-white" : ""}`}
                 style={{ backgroundColor: c }}
               />
             ))}
             <input
               value={color} onChange={e => setColor(e.target.value)}
-              className="ml-2 w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono"
+              className="ml-2 w-24 bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-xs font-mono"
             />
           </div>
         </label>
@@ -361,31 +361,31 @@ function CreateProjectModal({ onClose, onCreate }: {
           <input value={abbreviation} onChange={e => setAbbreviation(e.target.value)}
             placeholder={auto ? `auto: ${auto}` : "auto-computed from name"}
             maxLength={12}
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm font-mono" />
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm font-mono" />
         </label>
         <label className="block">
           <span className="text-sm text-slate-300">Working directory <span className="text-xs text-slate-500">(optional — used when creating a tmux session for this project)</span></span>
           <input value={workingDir} onChange={e => setWorkingDir(e.target.value)}
             placeholder="e.g. /home/dsu/Projects/MyApp or ~/Projects/MyApp"
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm font-mono" />
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm font-mono" />
         </label>
         <label className="block">
           <span className="text-sm text-slate-300">Tags (comma separated)</span>
           <input value={tagsRaw} onChange={e => setTagsRaw(e.target.value)}
             placeholder="project, study, ..."
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm" />
         </label>
         <label className="block">
           <span className="text-sm text-slate-300">Notes</span>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm" />
         </label>
         {error && <div className="text-sm text-red-400">{error}</div>}
         <div className="flex gap-2 pt-2">
           <button disabled={busy || !name.trim()} onClick={submit}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white disabled:opacity-50"
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white disabled:opacity-50"
           >Create</button>
-          <button onClick={onClose} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm">Cancel</button>
+          <button onClick={onClose} className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-sm text-sm">Cancel</button>
         </div>
       </div>
     </div>
@@ -582,7 +582,7 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
             <span className="text-sm text-slate-300">Name {project.system && <span className="text-xs text-slate-500">(locked — system project)</span>}</span>
             <input
               value={name} onChange={e => setName(e.target.value)} disabled={project.system}
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm disabled:opacity-50"
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm disabled:opacity-50"
             />
           </label>
           <label className="block">
@@ -590,12 +590,12 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
             <div className="mt-1 flex flex-wrap gap-1">
               {PROJECT_PALETTE.map(c => (
                 <button key={c} onClick={() => setColor(c)}
-                  className={`w-6 h-6 rounded ${color === c ? "ring-2 ring-white" : ""}`}
+                  className={`w-6 h-6 rounded-sm ${color === c ? "ring-2 ring-white" : ""}`}
                   style={{ backgroundColor: c }}
                 />
               ))}
               <input value={color} onChange={e => setColor(e.target.value)}
-                className="ml-2 w-24 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs font-mono"
+                className="ml-2 w-24 bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-xs font-mono"
               />
             </div>
           </label>
@@ -604,23 +604,23 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
             <input value={abbreviation} onChange={e => setAbbreviation(e.target.value)}
               placeholder={autoAbbr ? `auto: ${autoAbbr}` : "auto-computed from name"}
               maxLength={12}
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm font-mono" />
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm font-mono" />
           </label>
           <label className="block">
             <span className="text-sm text-slate-300">Working directory <span className="text-xs text-slate-500">(used when creating a tmux session for this project)</span></span>
             <input value={workingDir} onChange={e => setWorkingDir(e.target.value)}
               placeholder="e.g. /home/dsu/Projects/MyApp or ~/Projects/MyApp"
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm font-mono" />
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm font-mono" />
           </label>
           <label className="block">
             <span className="text-sm text-slate-300">Tags</span>
             <input value={tagsRaw} onChange={e => setTagsRaw(e.target.value)}
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm" />
           </label>
           <label className="block">
             <span className="text-sm text-slate-300">Notes</span>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={5}
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm" />
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm" />
           </label>
 
           <div className="border-t border-slate-800 pt-4">
@@ -632,16 +632,16 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
                   <span className="text-xs text-slate-500 italic" title="No live tmux session with this name. The binding is stored and will re-attach automatically when a session with this name appears.">(not live)</span>
                 )}
                 <button onClick={unassign} disabled={busy}
-                  className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded">Unassign</button>
+                  className="text-xs px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded-sm">Unassign</button>
               </div>
             ) : (
               <>
                 <div className="flex gap-2">
                   <input value={assignTo} onChange={e => setAssignTo(e.target.value)}
                     placeholder={effectiveAbbr || "tmux session name"}
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm font-mono" />
+                    className="flex-1 bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm font-mono" />
                   <button onClick={smartAssign} disabled={busy || !assignTo.trim() || !!project.completed_at}
-                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white disabled:opacity-50"
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded-sm text-xs text-white disabled:opacity-50"
                     title="If a tmux session with this name exists, just bind to it. If not, create it (tmux new-session -d -s &lt;name&gt;) and bind. If tmux isn't running, the binding is still recorded and applies when a session with this name appears."
                   >Assign</button>
                 </div>
@@ -684,10 +684,10 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
                 onKeyDown={e => { if (e.key === "Enter") addTask(); }}
                 placeholder="New task name…"
                 disabled={!!project.completed_at}
-                className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm disabled:opacity-50"
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm disabled:opacity-50"
               />
               <button onClick={addTask} disabled={busy || !newTaskName.trim() || !!project.completed_at}
-                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs text-white disabled:opacity-50"
+                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded-sm text-xs text-white disabled:opacity-50"
               ><Plus size={12} /> Add</button>
             </div>
           </div>
@@ -700,11 +700,11 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
 
           <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-800">
             <button onClick={save} disabled={busy}
-              className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm text-white disabled:opacity-50"
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-sm text-sm text-white disabled:opacity-50"
             ><Check size={14} /> Save</button>
             {!project.system && (
               <button onClick={toggleComplete} disabled={busy}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm">
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-sm text-sm">
                 {project.completed_at ? <><RotateCcw size={14} /> Reopen</> : <><Check size={14} /> Mark complete</>}
               </button>
             )}
@@ -713,13 +713,13 @@ function ProjectDrawer({ project, onClose }: { project: Project; onClose: () => 
                 title={project.completed_at
                   ? "Completed projects can't be hidden"
                   : (project.hidden ? "Show this project in the main list" : "Hide this project from the main list")}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm disabled:opacity-50">
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-sm text-sm disabled:opacity-50">
                 {project.hidden ? <><Eye size={14} /> Unhide</> : <><EyeOff size={14} /> Hide</>}
               </button>
             )}
             {!project.system && (
               <button onClick={doDelete} disabled={busy}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded text-sm text-white ml-auto"
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded-sm text-sm text-white ml-auto"
               ><Trash2 size={14} /> Delete</button>
             )}
           </div>
@@ -776,12 +776,12 @@ function TaskRow({ task, mins, workdayHours, onToggle, onDelete, busy, done }: {
       {editing ? (
         <div className="flex-1 space-y-1">
           <input value={name} onChange={e => setName(e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-sm" />
+            className="w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-0.5 text-sm" />
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
             placeholder="notes…"
-            className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs" />
+            className="w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-0.5 text-xs" />
           <div className="flex gap-1">
-            <button onClick={save} className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded">Save</button>
+            <button onClick={save} className="text-xs px-2 py-0.5 bg-blue-600 hover:bg-blue-500 rounded-sm">Save</button>
             <button onClick={() => setEditing(false)} className="text-xs px-2 py-0.5 hover:text-white">Cancel</button>
           </div>
         </div>
@@ -800,7 +800,7 @@ function TaskRow({ task, mins, workdayHours, onToggle, onDelete, busy, done }: {
                 onBlur={saveNotesOnly}
                 rows={3}
                 placeholder="task notes (saved on blur)"
-                className="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-xs text-slate-200"
               />
               {savingNotes && <span className="text-[10px] text-slate-500">saving…</span>}
             </div>
@@ -850,7 +850,7 @@ function Project30DayChart({ pomodoros, taskById, projectId, color, workdayHours
         {days.map((d, i) => {
           const h = Math.max(2, (d.min / max) * 64);
           return (
-            <div key={i} className="flex-1 rounded-sm"
+            <div key={i} className="flex-1 rounded-xs"
               style={{ height: `${h}px`, backgroundColor: d.min > 0 ? color : "#1e293b" }}
               title={`${d.date.toLocaleDateString()}: ${formatDuration(d.min, workdayHours)}`}
             />
@@ -881,7 +881,7 @@ function ProjectRecentPomodoros({ pomodoros, workdayHours, onPick }: {
           const min = pomodoroMinutes(p);
           return (
             <button key={p.id} onClick={() => onPick(p.id)}
-              className="w-full text-left text-xs hover:bg-slate-800/50 rounded px-2 py-1 flex items-center gap-2"
+              className="w-full text-left text-xs hover:bg-slate-800/50 rounded-sm px-2 py-1 flex items-center gap-2"
             >
               <span className="text-slate-400 font-mono">{new Date(p.started_at).toLocaleString()}</span>
               <span className="text-slate-500 ml-auto">{formatDuration(min, workdayHours)}</span>
@@ -896,7 +896,7 @@ function ProjectRecentPomodoros({ pomodoros, workdayHours, onPick }: {
 function AnchorHeader({ anchor }: { anchor: { ts: string | null; activeWindowHours: number } }) {
   if (anchor.ts === null) {
     return (
-      <div className="text-xs text-slate-500 bg-slate-900/60 border border-slate-800 rounded px-3 py-1.5">
+      <div className="text-xs text-slate-500 bg-slate-900/60 border border-slate-800 rounded-sm px-3 py-1.5">
         No pomodoros yet — all projects are parked.
       </div>
     );
@@ -904,7 +904,7 @@ function AnchorHeader({ anchor }: { anchor: { ts: string | null; activeWindowHou
   const d = new Date(anchor.ts);
   const fmt = d.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
   return (
-    <div className="text-xs text-slate-500 bg-slate-900/60 border border-slate-800 rounded px-3 py-1.5">
+    <div className="text-xs text-slate-500 bg-slate-900/60 border border-slate-800 rounded-sm px-3 py-1.5">
       Active window: <span className="text-slate-300">{anchor.activeWindowHours}h</span>{" "}
       since last pomodoro at <span className="text-slate-300">{fmt}</span>.
     </div>
@@ -917,19 +917,19 @@ function ProgressChip({ progress }: { progress: "not_started" | "in_progress" | 
     in_progress: { bg: "bg-blue-900/50", text: "text-blue-300", label: "in progress" },
     completed:   { bg: "bg-green-900/50", text: "text-green-300", label: "✓ completed" },
   }[progress];
-  return <span className={`text-[10px] px-1.5 py-0.5 rounded ${styles.bg} ${styles.text}`}>{styles.label}</span>;
+  return <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${styles.bg} ${styles.text}`}>{styles.label}</span>;
 }
 
 function EngagementChip({ engagement }: { engagement: "active" | "parked" }) {
   const styles = engagement === "active"
     ? { bg: "bg-amber-900/50", text: "text-amber-300" }
     : { bg: "bg-slate-800",    text: "text-slate-500" };
-  return <span className={`text-[10px] px-1.5 py-0.5 rounded ${styles.bg} ${styles.text}`}>{engagement}</span>;
+  return <span className={`text-[10px] px-1.5 py-0.5 rounded-sm ${styles.bg} ${styles.text}`}>{engagement}</span>;
 }
 
 function TmuxChip({ name }: { name: string }) {
   return (
-    <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-900/40 text-cyan-300 font-mono" title={`tmux session: ${name}`}>
+    <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-cyan-900/40 text-cyan-300 font-mono" title={`tmux session: ${name}`}>
       ⌗ {name}
     </span>
   );

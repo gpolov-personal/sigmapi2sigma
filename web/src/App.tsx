@@ -105,7 +105,7 @@ function AppInner() {
           <button
             onClick={() => setSettingsOpen(true)}
             title="Settings"
-            className="text-slate-400 hover:text-white p-1.5 rounded hover:bg-slate-800"
+            className="text-slate-400 hover:text-white p-1.5 rounded-sm hover:bg-slate-800"
           >
             <SettingsIcon size={18} />
           </button>
@@ -153,8 +153,8 @@ function NavGroup({
   const demoted = !!group.demoted;
   const labelClass = "text-[10px] uppercase tracking-wider text-slate-500 mb-0.5";
   const tabBase = demoted
-    ? "px-2 py-1 rounded text-xs"
-    : "px-3 py-1.5 rounded text-sm";
+    ? "px-2 py-1 rounded-sm text-xs"
+    : "px-3 py-1.5 rounded-sm text-sm";
   const tabIdle = demoted
     ? "text-slate-600 hover:text-white hover:bg-slate-800"
     : "text-slate-400 hover:text-white hover:bg-slate-800";

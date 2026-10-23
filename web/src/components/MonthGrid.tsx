@@ -82,10 +82,10 @@ export function MonthGrid({ pomodoros, monthStart, onMonthChange, selectedProjec
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <button onClick={prevMonth} className="px-2 py-1 hover:bg-slate-800 rounded"><ChevronLeft size={16} /></button>
+        <button onClick={prevMonth} className="px-2 py-1 hover:bg-slate-800 rounded-sm"><ChevronLeft size={16} /></button>
         <div className="text-sm font-semibold w-40 text-center">{monthLabel}</div>
-        <button onClick={nextMonth} className="px-2 py-1 hover:bg-slate-800 rounded"><ChevronRight size={16} /></button>
-        <button onClick={goToday} className="ml-2 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded hover:bg-slate-700">Today</button>
+        <button onClick={nextMonth} className="px-2 py-1 hover:bg-slate-800 rounded-sm"><ChevronRight size={16} /></button>
+        <button onClick={goToday} className="ml-2 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded-sm hover:bg-slate-700">Today</button>
       </div>
 
       <div className="grid grid-cols-7 gap-1">
@@ -110,7 +110,7 @@ export function MonthGrid({ pomodoros, monthStart, onMonthChange, selectedProjec
               <div className="text-xs text-slate-300">{d.getDate()}</div>
               <div className="flex-1" />
               {data && data.perProject.size > 0 && (
-                <div className="h-1.5 w-full rounded overflow-hidden flex bg-slate-800">
+                <div className="h-1.5 w-full rounded-sm overflow-hidden flex bg-slate-800">
                   {[...data.perProject.entries()]
                     .sort((a, b) => b[1] - a[1])
                     .map(([pid, mins]) => {

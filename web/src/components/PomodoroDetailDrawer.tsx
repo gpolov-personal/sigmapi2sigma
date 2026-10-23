@@ -119,7 +119,7 @@ export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
               out.push(
                 <div
                   key={pid}
-                  className="border border-slate-800 rounded bg-slate-950/40 px-3 py-2"
+                  className="border border-slate-800 rounded-sm bg-slate-950/40 px-3 py-2"
                   style={{ borderLeft: `4px solid ${proj?.color ?? "#475569"}` }}
                 >
                   <div className="text-sm font-semibold text-slate-100">{proj?.name ?? "[deleted project]"}</div>
@@ -138,7 +138,7 @@ export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
             onChange={e => setNotes(e.target.value)}
             onBlur={saveNotes}
             rows={3}
-            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+            className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
           />
           {savingNotes && <span className="text-xs text-slate-500">saving…</span>}
         </label>
@@ -166,7 +166,7 @@ export function PomodoroDetailDrawer({ pomodoroId, onClose }: Props) {
             {slice.conversations.map(c => {
               const isExpanded = expanded.has(c.sessionId);
               return (
-                <div key={c.sessionId} className="border border-slate-800 rounded p-3 bg-slate-950/40">
+                <div key={c.sessionId} className="border border-slate-800 rounded-sm p-3 bg-slate-950/40">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       {(() => {
