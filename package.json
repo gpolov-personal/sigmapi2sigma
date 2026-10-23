@@ -1,7 +1,7 @@
 {
   "name": "sigmapi2sigma",
   "private": true,
-  "version": "1.6.2",
+  "version": "1.6.3",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k --kill-signal SIGTERM -n server,web -c blue,green \"npm run dev:server\" \"npm run dev:web\"",
@@ -20,23 +20,22 @@
     "test": "node --import tsx --test server/lib/*.test.ts"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "lucide-react": "^1.14.0"
+    "express": "^5.3.0",
+    "lucide-react": "^1.61.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.0",
-    "@types/node": "^22.10.5",
-    "@types/react": "^19.0.7",
-    "@types/react-dom": "^19.0.3",
-    "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
-    "concurrently": "^9.1.2",
-    "postcss": "^8.5.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "tailwindcss": "^3.4.17",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.9.9",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "concurrently": "^10.0.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
   }
 }

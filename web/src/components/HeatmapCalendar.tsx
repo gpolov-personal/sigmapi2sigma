@@ -136,17 +136,17 @@ export function HeatmapCalendar({ pomodoros, selectedProjectIds, onSelectDay }: 
   return (
     <div className="w-full space-y-2">
       <div className="flex items-center gap-2">
-        <button onClick={() => setYear(y => y - 1)} className="px-2 py-1 hover:bg-slate-800 rounded">
+        <button onClick={() => setYear(y => y - 1)} className="px-2 py-1 hover:bg-slate-800 rounded-sm">
           <ChevronLeft size={16} />
         </button>
         <div className="text-sm font-semibold w-16 text-center">{year}</div>
-        <button onClick={() => setYear(y => y + 1)} className="px-2 py-1 hover:bg-slate-800 rounded">
+        <button onClick={() => setYear(y => y + 1)} className="px-2 py-1 hover:bg-slate-800 rounded-sm">
           <ChevronRight size={16} />
         </button>
         {year !== currentYear && (
           <button
             onClick={() => setYear(currentYear)}
-            className="ml-2 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded hover:bg-slate-700"
+            className="ml-2 px-2 py-1 text-xs bg-slate-800 border border-slate-700 rounded-sm hover:bg-slate-700"
           >This year</button>
         )}
       </div>
@@ -187,7 +187,7 @@ export function HeatmapCalendar({ pomodoros, selectedProjectIds, onSelectDay }: 
                 key={`c-${ci}-${ri}`}
                 onClick={() => onSelectDay(cell.date)}
                 title={tooltip}
-                className="rounded-sm hover:ring-1 hover:ring-white/60 w-full h-full"
+                className="rounded-xs hover:ring-1 hover:ring-white/60 w-full h-full"
                 style={{ gridColumn: gridCol, gridRow, backgroundColor: bg }}
               />
             );
@@ -195,9 +195,9 @@ export function HeatmapCalendar({ pomodoros, selectedProjectIds, onSelectDay }: 
         )}
       </div>
 
-      <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-500">
+      <div className="flex items-center gap-2 text-[11px] text-slate-500">
         <span>less</span>
-        {palette.map((c, i) => <span key={i} className="w-4 h-4 rounded-sm" style={{ backgroundColor: c }} />)}
+        {palette.map((c, i) => <span key={i} className="w-4 h-4 rounded-xs" style={{ backgroundColor: c }} />)}
         <span>more</span>
         <span className="ml-3">scale: 0 · ≤30m · ≤2h · ≤4h · &gt;4h</span>
       </div>

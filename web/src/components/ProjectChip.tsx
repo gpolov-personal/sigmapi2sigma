@@ -41,7 +41,7 @@ export function ProjectChip({ project, task, label, color, onClick, title, class
     <span
       onClick={onClick}
       title={tooltip}
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${interactive ? "cursor-pointer hover:opacity-80" : ""} ${className ?? ""}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium ${interactive ? "cursor-pointer hover:opacity-80" : ""} ${className ?? ""}`}
       style={{ backgroundColor: bg, color: text }}
     >
       {typeof display === "string" ? display : (

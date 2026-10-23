@@ -80,7 +80,7 @@ export function SettingsModal({ open, onClose }: Props) {
             <input
               type="number" min={1} max={24} step={0.5} value={workdayHours}
               onChange={e => setWorkdayHours(Number(e.target.value))}
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
             />
           </label>
           <label className="block">
@@ -88,7 +88,7 @@ export function SettingsModal({ open, onClose }: Props) {
             <input
               type="number" min={1} max={180} value={defaultPomodoroDuration}
               onChange={e => setDefaultPomodoroDuration(Number(e.target.value))}
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
             />
           </label>
           <label className="block">
@@ -96,7 +96,7 @@ export function SettingsModal({ open, onClose }: Props) {
             <input
               type="number" min={1} max={60} value={restMinutes}
               onChange={e => setRestMinutes(Number(e.target.value))}
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
             />
           </label>
           <label className="block">
@@ -104,7 +104,7 @@ export function SettingsModal({ open, onClose }: Props) {
             <input
               type="number" min={1} max={8760} step={1} value={activeWindowHours}
               onChange={e => setActiveWindowHours(Number(e.target.value))}
-              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+              className="mt-1 w-full bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
             />
           </label>
           <label className="block">
@@ -113,13 +113,13 @@ export function SettingsModal({ open, onClose }: Props) {
               <select
                 value={startBeepSound}
                 onChange={e => setStartBeepSound(e.target.value as BeepSound)}
-                className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
               >
                 {BEEP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               <button
                 onClick={() => preview(startBeepSound)}
-                className="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded"
+                className="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded-sm"
               >Preview</button>
             </div>
           </label>
@@ -129,13 +129,13 @@ export function SettingsModal({ open, onClose }: Props) {
               <select
                 value={endBeepSound}
                 onChange={e => setEndBeepSound(e.target.value as BeepSound)}
-                className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
               >
                 {BEEP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               <button
                 onClick={() => preview(endBeepSound)}
-                className="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded"
+                className="px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded-sm"
               >Preview</button>
             </div>
           </label>
@@ -158,11 +158,11 @@ export function SettingsModal({ open, onClose }: Props) {
             <button
               disabled={busy}
               onClick={handleSave}
-              className="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
+              className="px-3 py-1.5 rounded-sm bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
             >Save</button>
             <button
               onClick={onClose}
-              className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-white text-sm"
+              className="px-3 py-1.5 rounded-sm bg-slate-700 hover:bg-slate-600 text-white text-sm"
             >Cancel</button>
           </div>
         </div>

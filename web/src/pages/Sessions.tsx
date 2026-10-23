@@ -86,7 +86,7 @@ export function Sessions() {
         <select
           value={hours}
           onChange={e => setHours(Number(e.target.value))}
-          className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm"
+          className="bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm"
         >
           {HOURS_OPTIONS.map(h => (
             <option key={h} value={h}>{h === 0 ? "all time" : `${h}h`}</option>
@@ -96,11 +96,11 @@ export function Sessions() {
           placeholder="filter by path / name / prompt / id"
           value={filter}
           onChange={e => setFilter(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded px-3 py-1 text-sm flex-1 min-w-64"
+          className="bg-slate-800 border border-slate-700 rounded-sm px-3 py-1 text-sm flex-1 min-w-64"
         />
         <button
           onClick={refresh}
-          className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm hover:bg-slate-700"
+          className="px-3 py-1 bg-slate-800 border border-slate-700 rounded-sm text-sm hover:bg-slate-700"
         >
           {loading ? "..." : "Refresh"}
         </button>
@@ -110,18 +110,18 @@ export function Sessions() {
       <AnchorLine anchor={anchor} hours={hours} />
 
       {allAccounts.length > 1 && (
-        <div className="flex gap-1 items-center text-xs -mt-2">
+        <div className="flex gap-1 items-center text-xs">
           <span className="text-slate-500">account:</span>
           <button onClick={() => setAccountFilter(null)}
-            className={`px-2 py-0.5 rounded ${accountFilter === null ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400"}`}>all</button>
+            className={`px-2 py-0.5 rounded-sm ${accountFilter === null ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400"}`}>all</button>
           {allAccounts.map(a => (
             <button key={a} onClick={() => setAccountFilter(a)}
-              className={`px-2 py-0.5 rounded ${accountFilter === a ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400"}`}>{a}</button>
+              className={`px-2 py-0.5 rounded-sm ${accountFilter === a ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-400"}`}>{a}</button>
           ))}
         </div>
       )}
 
-      <div className="border border-slate-800 rounded overflow-hidden">
+      <div className="border border-slate-800 rounded-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-900 text-slate-400 text-xs uppercase tracking-wide">
             <tr>
@@ -361,7 +361,7 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
     <div className="fixed inset-0 bg-black/60 flex justify-end" onClick={onClose}>
       <div
         onClick={e => e.stopPropagation()}
-        className="w-[48rem] max-w-full bg-slate-900 border-l border-slate-800 overflow-auto p-6 space-y-4"
+        className="w-3xl max-w-full bg-slate-900 border-l border-slate-800 overflow-auto p-6 space-y-4"
       >
         <div className="flex justify-between items-start">
           <div>
@@ -420,9 +420,9 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
             Recent user prompts {recentPrompts && recentPrompts.length > 0 && <span>(last {recentPrompts.length})</span>}
           </div>
           {recentPrompts === null ? (
-            <pre className="bg-slate-950 border border-slate-800 rounded p-3 text-sm whitespace-pre-wrap break-words text-slate-500">Loading…</pre>
+            <pre className="bg-slate-950 border border-slate-800 rounded-sm p-3 text-sm whitespace-pre-wrap wrap-break-word text-slate-500">Loading…</pre>
           ) : recentPrompts.length === 0 ? (
-            <pre className="bg-slate-950 border border-slate-800 rounded p-3 text-sm whitespace-pre-wrap break-words text-slate-500">
+            <pre className="bg-slate-950 border border-slate-800 rounded-sm p-3 text-sm whitespace-pre-wrap wrap-break-word text-slate-500">
               {session.lastUserPrompt ?? "(none found)"}
             </pre>
           ) : (
@@ -434,7 +434,7 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
           )}
         </div>
         <div className="hidden">
-          <pre className="bg-slate-950 border border-slate-800 rounded p-3 text-sm whitespace-pre-wrap break-words">
+          <pre className="bg-slate-950 border border-slate-800 rounded-sm p-3 text-sm whitespace-pre-wrap wrap-break-word">
             {session.lastUserPrompt ?? "(none found in tail window)"}
           </pre>
         </div>
@@ -445,7 +445,7 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
             <input
               value={tmuxName}
               onChange={e => setTmuxName(e.target.value)}
-              className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm font-mono flex-1"
+              className="bg-slate-800 border border-slate-700 rounded-sm px-2 py-1 text-sm font-mono flex-1"
             />
             {originalTmuxName && tmuxName !== originalTmuxName && (
               <button
@@ -469,14 +469,14 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
               <span className="text-slate-500">resume under:</span>
               {session.accounts.map(a => (
                 <button key={a} onClick={() => setResumeAccount(a)}
-                  className={`px-2 py-0.5 rounded ${resumeAccount === a ? "bg-emerald-700 text-white" : "bg-slate-800 text-slate-400"}`}>{a}</button>
+                  className={`px-2 py-0.5 rounded-sm ${resumeAccount === a ? "bg-emerald-700 text-white" : "bg-slate-800 text-slate-400"}`}>{a}</button>
               ))}
             </div>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
             <button
               onClick={() => copy(resumeCmd)}
-              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded text-sm hover:bg-slate-700"
+              className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-sm text-sm hover:bg-slate-700"
             >
               Copy resume command
             </button>
@@ -484,7 +484,7 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
               <button
                 onClick={resumeInTmux}
                 disabled={resuming || !tmuxName.trim()}
-                className="px-3 py-1.5 bg-blue-600 rounded text-sm hover:bg-blue-500 disabled:opacity-50"
+                className="px-3 py-1.5 bg-blue-600 rounded-sm text-sm hover:bg-blue-500 disabled:opacity-50"
                 title={`Will launch at ${resumeCwd}. An existing "${tmuxName}" session gets a new window; it is never disturbed or replaced.`}
               >
                 {resuming ? "Starting…" : "Resume in tmux"}
@@ -493,7 +493,7 @@ function SessionDrawer({ session, liveLocations, tmux, onClose }: {
           </div>
         </div>
         {resumeMsg && (
-          <div className="text-sm bg-slate-950 border border-slate-800 rounded p-3 whitespace-pre-wrap break-words">
+          <div className="text-sm bg-slate-950 border border-slate-800 rounded-sm p-3 whitespace-pre-wrap wrap-break-word">
             {resumeMsg}
           </div>
         )}
@@ -508,11 +508,11 @@ function PromptCard({ ts, text }: { ts: string | null; text: string }) {
   const isLong = text.length > PREVIEW;
   const shown = expanded || !isLong ? text : text.slice(0, PREVIEW);
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded p-3">
+    <div className="bg-slate-950 border border-slate-800 rounded-sm p-3">
       {ts && (
         <div className="text-xs text-slate-500 mb-1">{new Date(ts).toLocaleString()}</div>
       )}
-      <pre className="text-sm whitespace-pre-wrap break-words">
+      <pre className="text-sm whitespace-pre-wrap wrap-break-word">
         {shown}
         {isLong && !expanded && <span className="text-slate-500">…</span>}
       </pre>
@@ -543,7 +543,7 @@ function AnchorLine({ anchor, hours }: { anchor: string | null; hours: number })
   const start = new Date(end.getTime() - hours * 3600 * 1000);
   const fmt = (d: Date) => d.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" });
   return (
-    <div className="text-xs text-slate-500 -mt-2">
+    <div className="text-xs text-slate-500">
       Anchor: last interaction <span className="text-slate-300">{fmt(end)}</span> —
       showing sessions <span className="text-slate-300">{fmt(start)}</span> → <span className="text-slate-300">{fmt(end)}</span>
     </div>

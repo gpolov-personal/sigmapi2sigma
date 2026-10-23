@@ -24,7 +24,7 @@ export function AccountBadge({ accounts }: { accounts: string[] }) {
     <span className="inline-flex gap-1">
       {accounts.map(a => (
         <span key={a}
-          className="text-[10px] px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5"
+          className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium inline-flex items-center gap-0.5"
           style={{ backgroundColor: `hsl(${hue(a)} 40% 25%)`, color: `hsl(${hue(a)} 80% 80%)` }}
           title={`Claude account: ${a} (not a tmux window or pane)`}
         >

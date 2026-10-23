@@ -65,11 +65,11 @@ export function Snapshots() {
         <button
           onClick={takeSnapshot}
           disabled={busy}
-          className="px-3 py-1.5 bg-blue-600 rounded text-sm hover:bg-blue-500 disabled:opacity-50"
+          className="px-3 py-1.5 bg-blue-600 rounded-sm text-sm hover:bg-blue-500 disabled:opacity-50"
         >
           Snapshot now
         </button>
-        <button onClick={refresh} className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-sm">Refresh</button>
+        <button onClick={refresh} className="px-3 py-1 bg-slate-800 border border-slate-700 rounded-sm text-sm">Refresh</button>
       </div>
 
       {snaps.length === 0 && (
@@ -80,7 +80,7 @@ export function Snapshots() {
 
       <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(22rem, 1fr))" }}>
         {snaps.map(s => (
-          <div key={s.name} className="border border-slate-800 rounded p-4 bg-slate-900/30 space-y-2">
+          <div key={s.name} className="border border-slate-800 rounded-sm p-4 bg-slate-900/30 space-y-2">
             <div className="flex justify-between items-center">
               <div className="font-mono text-sm">{s.name}</div>
               <div className="text-xs text-slate-500">{relativeTime(s.mtime)}</div>
@@ -107,13 +107,13 @@ export function Snapshots() {
                       <button
                         onClick={() => restore(s.name, false, false, ss.name)}
                         disabled={busy}
-                        className="px-1.5 py-0.5 bg-blue-600 rounded text-[10px] hover:bg-blue-500 disabled:opacity-50"
+                        className="px-1.5 py-0.5 bg-blue-600 rounded-sm text-[10px] hover:bg-blue-500 disabled:opacity-50"
                         title={`Recreate only "${ss.name}" (${ss.windows.length} windows, ${nPanes} panes) from this snapshot`}
                       >Restore</button>
                       <button
                         onClick={() => restore(s.name, false, true, ss.name)}
                         disabled={busy}
-                        className="px-1.5 py-0.5 bg-red-700 rounded text-[10px] hover:bg-red-600 disabled:opacity-50"
+                        className="px-1.5 py-0.5 bg-red-700 rounded-sm text-[10px] hover:bg-red-600 disabled:opacity-50"
                         title={`Kill a running "${ss.name}" first, then recreate it`}
                       >force</button>
                     </span>
@@ -125,21 +125,21 @@ export function Snapshots() {
               <button
                 onClick={() => restore(s.name, true, false)}
                 disabled={busy}
-                className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs"
+                className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-sm text-xs"
               >
                 Dry-run restore
               </button>
               <button
                 onClick={() => restore(s.name, false, false)}
                 disabled={busy}
-                className="px-2 py-1 bg-blue-600 rounded text-xs"
+                className="px-2 py-1 bg-blue-600 rounded-sm text-xs"
               >
                 Restore
               </button>
               <button
                 onClick={() => restore(s.name, false, true)}
                 disabled={busy}
-                className="px-2 py-1 bg-red-600 rounded text-xs"
+                className="px-2 py-1 bg-red-600 rounded-sm text-xs"
                 title="Kills any tmux session with a colliding name first"
               >
                 Restore --force
@@ -150,12 +150,12 @@ export function Snapshots() {
       </div>
 
       {restoreLog !== null && (
-        <div className="border border-slate-800 rounded bg-slate-950/50">
+        <div className="border border-slate-800 rounded-sm bg-slate-950/50">
           <div className="px-3 py-2 text-xs text-slate-500 border-b border-slate-800 flex justify-between">
             <span>restore output</span>
             <button onClick={() => setRestoreLog(null)} className="hover:text-white">clear</button>
           </div>
-          <pre className="p-3 text-xs whitespace-pre-wrap break-words">{restoreLog}</pre>
+          <pre className="p-3 text-xs whitespace-pre-wrap wrap-break-word">{restoreLog}</pre>
         </div>
       )}
 
@@ -169,7 +169,7 @@ export function Snapshots() {
 // legend spells every part out once, above the cards.
 function RowLegend({ accounts }: { accounts: string[] }) {
   return (
-    <div className="border border-slate-800 rounded bg-slate-900/30 px-3 py-2 text-xs text-slate-500 flex flex-wrap items-center gap-x-4 gap-y-1">
+    <div className="border border-slate-800 rounded-sm bg-slate-900/30 px-3 py-2 text-xs text-slate-500 flex flex-wrap items-center gap-x-4 gap-y-1">
       <span className="text-slate-400">How to read a session row:</span>
       <span><b className="text-slate-300 font-mono">2w</b> = tmux windows</span>
       <span><b className="text-slate-300 font-mono">2p</b> = panes across those windows</span>
@@ -264,7 +264,7 @@ function BackupsSection() {
   const last = data.backups[0];
 
   return (
-    <div className="border border-slate-800 rounded bg-slate-900/30 mt-8">
+    <div className="border border-slate-800 rounded-sm bg-slate-900/30">
       <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-3">
         <h2 className="font-semibold">Backups</h2>
         <span className="text-xs text-slate-500">
@@ -272,9 +272,9 @@ function BackupsSection() {
           {last && <> · last {relativeTime(last.mtime)}</>}
         </span>
         <button onClick={backupNow} disabled={busy}
-          className="ml-auto px-3 py-1 bg-blue-600 rounded text-xs hover:bg-blue-500 disabled:opacity-50"
+          className="ml-auto px-3 py-1 bg-blue-600 rounded-sm text-xs hover:bg-blue-500 disabled:opacity-50"
         >Backup now</button>
-        <button onClick={refresh} className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-xs">Refresh</button>
+        <button onClick={refresh} className="px-2 py-1 bg-slate-800 border border-slate-700 rounded-sm text-xs">Refresh</button>
       </div>
 
       {/* Cloud remote config */}
@@ -285,9 +285,9 @@ function BackupsSection() {
             <input
               value={remoteInput} onChange={e => setRemoteInput(e.target.value)}
               placeholder="e.g. gdrive:sigmapi2sigma"
-              className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-xs font-mono"
+              className="flex-1 bg-slate-800 border border-slate-700 rounded-sm px-2 py-0.5 text-xs font-mono"
             />
-            <button onClick={saveRemote} disabled={busy} className="px-2 py-0.5 bg-blue-600 rounded text-xs">Save</button>
+            <button onClick={saveRemote} disabled={busy} className="px-2 py-0.5 bg-blue-600 rounded-sm text-xs">Save</button>
             <button onClick={() => { setEditingRemote(false); setRemoteInput(data.backupRemote ?? ""); }}
               className="text-xs text-slate-400">Cancel</button>
           </>
@@ -323,7 +323,7 @@ function BackupsSection() {
                 <td className="px-4 py-1.5 text-xs text-slate-400">{fmtBytes(b.sizeBytes)}</td>
                 <td className="px-4 py-1.5">
                   <button onClick={() => restoreBackup(b.filename)} disabled={busy}
-                    className="px-2 py-0.5 text-xs bg-slate-800 border border-slate-700 rounded hover:bg-slate-700"
+                    className="px-2 py-0.5 text-xs bg-slate-800 border border-slate-700 rounded-sm hover:bg-slate-700"
                   >Restore</button>
                 </td>
               </tr>
@@ -338,7 +338,7 @@ function BackupsSection() {
             <span>backup output</span>
             <button onClick={() => setLog(null)} className="hover:text-white">clear</button>
           </div>
-          <pre className="px-4 pb-3 text-xs whitespace-pre-wrap break-words">{log}</pre>
+          <pre className="px-4 pb-3 text-xs whitespace-pre-wrap wrap-break-word">{log}</pre>
         </div>
       )}
     </div>
