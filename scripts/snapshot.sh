@@ -14,6 +14,10 @@ mkdir -p "$SNAP_DIR"
 
 tmux list-sessions >/dev/null 2>&1 || exit 0
 
+# Right after a boot restore, panes are still at a shell prompt while claude starts,
+# so saving now would record every conversation as gone. autostart.sh sets this marker.
+[[ -n $(find "$DATA_DIR/restore-in-progress" -mmin -2 2>/dev/null) ]] && exit 0
+
 # Encode a cwd to Claude Code's project-dir form: replace /._ with -.
 encode_cwd() {
   printf '%s' "$1" | sed 's|[/._]|-|g'

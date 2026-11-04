@@ -85,6 +85,16 @@ To enable per-tmux-pane shell history capture:
 npm run install-shell-hook
 ```
 
+To open your workspace at Windows login (WSL only, needs Windows Terminal 1.24+):
+
+```bash
+npm run install-autostart      # undo with: npm run uninstall-autostart
+```
+
+Each login then opens one Windows Terminal window with two tabs: **sigmapi2sigma** running `npm run dev`, and **tmux** with the latest snapshot restored, the same as clicking *Restore* in the Snapshots tab. Tmux that already has sessions is left alone. Stopping the app with Ctrl+C leaves you at a shell in that tab.
+
+The installer writes only on the Windows side: a `sigmapi2sigma.lnk` shortcut in the Startup folder (`Win+R`, `shell:startup`) and a Windows Terminal [fragment](https://learn.microsoft.com/windows/terminal/json-fragment-extensions) that adds the profile and its icon, so `settings.json` is not edited. Restore output is appended to `~/.sigmapi2sigma/autostart.log`. Claude conversations and plain shells come back in their folders; scrollback and other running programs do not.
+
 To set up cloud backup mirroring (one-time):
 
 ```bash
@@ -109,6 +119,7 @@ The full rclone walkthrough — including the WSL2 OAuth gotcha — is in the tr
 ├── settings.json                    workday hours, beep sounds, durations
 ├── accounts.json                    optional: which Claude config dir(s) to read (see below)
 ├── snapshots/{latest,prev*}.json    rotated tmux snapshots (every 5 min)
+├── autostart.log                    restore output from the Windows login autostart
 ├── shell-history/YYYY-MM-DD.jsonl   per-day shell command log (60-day retention)
 ├── backups/sigmapi2sigma-*.tar.gz   periodic backups (rotated)
 └── backup-config                    optional: BACKUP_REMOTE=...

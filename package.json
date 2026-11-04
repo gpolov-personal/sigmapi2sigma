@@ -1,7 +1,7 @@
 {
   "name": "sigmapi2sigma",
   "private": true,
-  "version": "1.6.3",
+  "version": "1.7.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently -k --kill-signal SIGTERM -n server,web -c blue,green \"npm run dev:server\" \"npm run dev:web\"",
@@ -11,6 +11,8 @@
     "build:web": "vite build",
     "install-cron": "bash scripts/install-cron.sh",
     "uninstall-cron": "bash scripts/uninstall-cron.sh",
+    "install-autostart": "bash scripts/install-autostart.sh",
+    "uninstall-autostart": "bash scripts/uninstall-autostart.sh",
     "install-shell-hook": "bash scripts/install-shell-hook.sh",
     "uninstall-shell-hook": "bash scripts/uninstall-shell-hook.sh",
     "snapshot": "bash scripts/snapshot.sh",
