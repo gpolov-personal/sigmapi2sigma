@@ -57,7 +57,7 @@ Same data, two angles. The union is your workspace.
 - **Backend** — Node + Express + TypeScript via [`tsx`](https://tsx.is/), serving a tiny REST API (~10 routes). Storage: atomically-written JSON files. No database, no server processes apart from the dev server itself. Listens only on `127.0.0.1`.
 - **Frontend** — Vite + React 19 + Tailwind. One SPA, seven tabs.
 - **Periodic jobs** — User crontab (snapshot tmux every 5 min, backup every 30 min, weekly history prune). Runs even when the dev server is off.
-- **Optional cloud sync** — `rclone sync` after each backup. Same retention policy applied locally and remotely.
+- **Optional cloud sync** — `rclone copy` twice a day, retried if the remote refuses it, with results in `backups/sync.log`. Backups rotated out locally stay on the remote.
 - **Conversation reading** — Read-only access to AI CLI session logs (currently Claude Code's `~/.claude/projects/**/*.jsonl`). Never modifies them.
 
 ---
@@ -196,7 +196,7 @@ Without the hook everything still works — resolution falls back to mtime, and 
 > 1 year      delete
 ```
 
-Same policy applied to the cloud mirror. Manually triggered backups (`npm run backup` or "Backup now" in the UI) always create a fresh bundle; the scheduled cron run skips when no source file has changed.
+This applies to local backups; the cloud copy keeps everything it has received. Manually triggered backups (`npm run backup` or "Backup now" in the UI) always create a fresh bundle; the scheduled cron run skips when no source file has changed.
 
 ---
 
