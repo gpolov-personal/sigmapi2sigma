@@ -57,7 +57,7 @@ Same data, two angles. The union is your workspace.
 - **Backend** — Node + Express + TypeScript via [`tsx`](https://tsx.is/), serving a tiny REST API (~10 routes). Storage: atomically-written JSON files. No database, no server processes apart from the dev server itself. Listens only on `127.0.0.1`.
 - **Frontend** — Vite + React 19 + Tailwind. One SPA, seven tabs.
 - **Periodic jobs** — User crontab (snapshot tmux every 5 min, backup every 30 min, weekly history prune). Runs even when the dev server is off.
-- **Optional cloud sync** — `rclone copy` twice a day, retried if the remote refuses it, with results in `backups/sync.log`. Backups rotated out locally stay on the remote.
+- **Optional cloud sync** — `rclone sync` twice a day, retried if the remote refuses it, with results in `backups/sync.log`. Same retention policy applied locally and remotely.
 - **Conversation reading** — Read-only access to AI CLI session logs (currently Claude Code's `~/.claude/projects/**/*.jsonl`). Never modifies them.
 
 ---
@@ -191,12 +191,11 @@ Without the hook everything still works — resolution falls back to mtime, and 
 
 ```
 ≤ 24 h        keep all (≈48 backups at 30-min intervals)
-1–30 days     keep one per day
-30–365 days   keep one per month
-> 1 year      delete
+1–14 days     keep one per day
+> 14 days     delete
 ```
 
-This applies to local backups; the cloud copy keeps everything it has received. Manually triggered backups (`npm run backup` or "Backup now" in the UI) always create a fresh bundle; the scheduled cron run skips when no source file has changed.
+The cloud copy mirrors this, so it holds the same files. Cleanup only runs after a new backup is written, so the newest backup always survives an idle stretch. A sync with no local backups is refused rather than emptying the remote. Manually triggered backups (`npm run backup` or "Backup now" in the UI) always create a fresh bundle; the scheduled cron run skips when no source file has changed.
 
 ---
 

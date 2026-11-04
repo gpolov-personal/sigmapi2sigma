@@ -148,7 +148,8 @@ done <<< "$ACCOUNTS_TSV"
 # Build the bundle.
 tar -C "$STAGE" -czf "$BUNDLE" .
 
-# Retention: keep all <=24h, one per day for 1–30d, one per month for 30–365d, drop >365d.
+# Retention: keep all <=24h, one per day for 1–14d, drop >14d. This runs only after a
+# new bundle exists, so an idle stretch can never age out the last remaining backup.
 node -e '
   const fs = require("fs");
   const path = require("path");
@@ -161,18 +162,14 @@ node -e '
     if (!m) return null;
     const [, y, mo, d, hh, mm, ss] = m;
     const ts = new Date(+y, +mo - 1, +d, +hh, +mm, ss ? +ss : 0).getTime();
-    return { f, ts, day: `${y}-${mo}-${d}`, month: `${y}-${mo}` };
+    return { f, ts, day: `${y}-${mo}-${d}` };
   }).filter(Boolean).sort((a, b) => b.ts - a.ts);
   const keepDay = new Set();
-  const keepMonth = new Set();
   const toDelete = [];
   for (const p of parsed) {
     const ageMs = now - p.ts;
-    if (ageMs > 365 * DAY) {
+    if (ageMs > 14 * DAY) {
       toDelete.push(p.f);
-    } else if (ageMs > 30 * DAY) {
-      if (keepMonth.has(p.month)) toDelete.push(p.f);
-      else keepMonth.add(p.month);
     } else if (ageMs > DAY) {
       if (keepDay.has(p.day)) toDelete.push(p.f);
       else keepDay.add(p.day);

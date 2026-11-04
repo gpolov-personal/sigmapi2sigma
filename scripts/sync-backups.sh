@@ -39,6 +39,13 @@ if ! command -v rclone >/dev/null 2>&1; then
   exit 1
 fi
 
+# sync mirrors, so an empty folder would empty the remote: a fresh install, or the
+# disk being restored from these very backups.
+if ! compgen -G "$BACKUP_DIR/*.tar.gz" >/dev/null; then
+  echo "$(date -Iseconds) SYNC SKIPPED: no local backups, refusing to mirror an empty folder"
+  exit 1
+fi
+
 # rclone's default client ID shares its Drive quota with other users, so the first
 # request is often refused with a 403. rclone gives up on that immediately instead
 # of using its own retries, hence retrying the whole command here.
@@ -47,8 +54,7 @@ RETRY_DELAY="${SP2S_SYNC_RETRY_DELAY:-30}"
 
 echo "$(date -Iseconds) sync start → $BACKUP_REMOTE ($(rclone version | head -1))"
 for ((attempt=1; attempt<=MAX_ATTEMPTS; attempt++)); do
-  # copy, not sync: backups that rotate out locally stay on the remote.
-  if rclone copy "$BACKUP_DIR" "$BACKUP_REMOTE" --include "*.tar.gz" --stats-one-line -v; then
+  if rclone sync "$BACKUP_DIR" "$BACKUP_REMOTE" --include "*.tar.gz" --stats-one-line -v; then
     echo "$(date -Iseconds) sync done (attempt $attempt)"
     exit 0
   fi
