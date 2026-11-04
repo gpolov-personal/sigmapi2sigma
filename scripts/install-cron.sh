@@ -18,7 +18,7 @@ fi
 block="$MARKER_BEGIN
 */5 * * * * $REPO/scripts/snapshot.sh >/dev/null 2>&1
 0 * * * * $REPO/scripts/backup.sh >/dev/null 2>&1
-0 9,21 * * * $REPO/scripts/sync-backups.sh >/dev/null 2>&1
+17 9,21 * * * $REPO/scripts/sync-backups.sh >/dev/null 2>&1
 0 4 * * 0 find $DATA_DIR/shell-history -name '*.jsonl' -mtime +60 -delete >/dev/null 2>&1
 $MARKER_END"
 
