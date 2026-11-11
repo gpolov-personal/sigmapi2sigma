@@ -91,7 +91,7 @@ To open your workspace at Windows login (WSL only, needs Windows Terminal 1.24+)
 npm run install-autostart      # undo with: npm run uninstall-autostart
 ```
 
-Each login then opens one Windows Terminal window with two tabs: **sigmapi2sigma** running `npm run dev`, and **tmux** with the latest snapshot restored, the same as clicking *Restore* in the Snapshots tab. Tmux that already has sessions is left alone. Stopping the app with Ctrl+C leaves you at a shell in that tab.
+Each login then opens one Windows Terminal window with two tabs: **sigmapi2sigma** running `npm run dev`, and **tmux** with the latest snapshot restored, the same as clicking *Restore* in the Snapshots tab. Tmux that already has sessions is left alone. Before restoring, the tmux tab also checks that Tailscale inside WSL is online, so SSH into this machine works after a reboot: it waits for `tailscaled`, runs `tailscale up` if it was left down, and otherwise prints the command to fix it. `tailscale up` without `sudo` needs a one-time `sudo tailscale set --operator=$USER`. Stopping the app with Ctrl+C leaves you at a shell in that tab.
 
 The installer writes only on the Windows side: a `sigmapi2sigma.lnk` shortcut in the Startup folder (`Win+R`, `shell:startup`) and a Windows Terminal [fragment](https://learn.microsoft.com/windows/terminal/json-fragment-extensions) that adds the profile and its icon, so `settings.json` is not edited. Restore output is appended to `~/.sigmapi2sigma/autostart.log`. Claude conversations and plain shells come back in their folders; scrollback and other running programs do not.
 
