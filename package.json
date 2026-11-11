@@ -13,6 +13,8 @@
     "uninstall-cron": "bash scripts/uninstall-cron.sh",
     "install-autostart": "bash scripts/install-autostart.sh",
     "uninstall-autostart": "bash scripts/uninstall-autostart.sh",
+    "install-boot-task": "bash scripts/boot-task.sh",
+    "uninstall-boot-task": "bash scripts/boot-task.sh -Uninstall",
     "install-shell-hook": "bash scripts/install-shell-hook.sh",
     "uninstall-shell-hook": "bash scripts/uninstall-shell-hook.sh",
     "snapshot": "bash scripts/snapshot.sh",

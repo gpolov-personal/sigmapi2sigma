@@ -91,22 +91,17 @@ To open your workspace at Windows login (WSL only, needs Windows Terminal 1.24+)
 npm run install-autostart      # undo with: npm run uninstall-autostart
 ```
 
-Each login then opens one Windows Terminal window with two tabs: **sigmapi2sigma** running `npm run dev`, and **tmux** with the latest snapshot restored, the same as clicking *Restore* in the Snapshots tab. Tmux that already has sessions is left alone. Before restoring, the tmux tab also checks that Tailscale inside WSL is online, so SSH into this machine works after a reboot: it waits for `tailscaled`, runs `tailscale up` if it was left down, and otherwise prints the command to fix it. `tailscale up` without `sudo` needs a one-time `sudo tailscale set --operator=$USER`. Stopping the app with Ctrl+C leaves you at a shell in that tab.
+Each login then opens one Windows Terminal window with two tabs: **sigmapi2sigma** running `npm run dev`, and **tmux** with the latest snapshot restored, the same as clicking *Restore* in the Snapshots tab. Tmux that already has sessions is left alone. Before restoring, the tmux tab also checks that Tailscale inside WSL is online (see [remote access](docs/remote-access.md#2-tailscale-inside-wsl)). Stopping the app with Ctrl+C leaves you at a shell in that tab.
 
 The installer writes only on the Windows side: a `sigmapi2sigma.lnk` shortcut in the Startup folder (`Win+R`, `shell:startup`) and a Windows Terminal [fragment](https://learn.microsoft.com/windows/terminal/json-fragment-extensions) that adds the profile and its icon, so `settings.json` is not edited. Restore output is appended to `~/.sigmapi2sigma/autostart.log`. Claude conversations and plain shells come back in their folders; scrollback and other running programs do not.
 
-The login autostart needs someone to log in to Windows. To have the workspace come back after a restart nobody is at (an update, a company-forced reboot), so you can SSH in from elsewhere, also add a scheduled task that starts WSL at boot. Run in an **admin** PowerShell; it asks for your Windows password (not the PIN), which Task Scheduler needs to run the task with nobody logged in:
+To stay reachable over SSH while away, including after a restart nobody logs in after (an update, a company-forced reboot), add a scheduled task that starts WSL at boot and restores the workspace before any login:
 
-```powershell
-$cred = Get-Credential -UserName "$env:USERDOMAIN\$env:USERNAME" -Message "Windows password (not PIN)"
-$a = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\wsl.exe" -Argument "-d Ubuntu-22.04 --exec /home/dsu/pProjects/sigmapi2sigma/scripts/autostart.sh boot"
-$t = New-ScheduledTaskTrigger -AtStartup
-$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 5 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName "WSL at boot" -Action $a -Trigger $t -Settings $s -User $cred.UserName -Password $cred.GetNetworkCredential().Password -RunLevel Limited
-# undo: Unregister-ScheduledTask "WSL at boot"
+```bash
+npm run install-boot-task      # UAC prompt + Windows password; undo with: npm run uninstall-boot-task
 ```
 
-Adjust the distro and path to yours. At boot, `autostart.sh boot` checks Tailscale, restores the latest snapshot into an empty tmux, starts the app in the background (output in `~/.sigmapi2sigma/app.log`, kept outside tmux so snapshots do not capture it), and then keeps WSL running so `tailscaled` and `sshd` stay up. A login afterwards changes nothing: the app tab finds the app running and the tmux tab attaches to the restored sessions. Test it before relying on it: restart, do not log in, and SSH in. If the Windows password changes, register the task again.
+[docs/remote-access.md](docs/remote-access.md) explains the whole setup: power settings, Tailscale inside WSL compared with the Windows app, what the task runs and why, how it fits with the login autostart, the password catch with fingerprint/PIN sign-in, and how to test and troubleshoot it.
 
 To set up cloud backup mirroring (one-time):
 
