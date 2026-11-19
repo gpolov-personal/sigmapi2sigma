@@ -234,8 +234,12 @@ The task logs on with the password stored when it was registered, so:
 
 ## Troubleshooting
 
+Start with `npm run status` in WSL (locally or over SSH). It checks each part below
+and prints the command to run for each problem.
+
 | Symptom | Look at |
 |---|---|
+| `windows  /mnt/c gives an error` in `npm run status` | WSL cannot read the Windows drive, so `powershell.exe`, `explorer.exe` and `npm run install-autostart` fail. The app, tmux and SSH do not need it. A WSL restart can fix it: in PowerShell, `wsl --shutdown`, then `Start-ScheduledTask "WSL at boot"` |
 | SSH times out after a restart | Log in and check `LastTaskResult`. Then `~/.sigmapi2sigma/autostart.log`: no `boot: started` line means the task did not start WSL |
 | `boot: started`, but Tailscale not online | The `tailscale:` line names the fix |
 | SSH works but tmux is empty | The `restore.sh` output just after `boot: started` in `autostart.log` |

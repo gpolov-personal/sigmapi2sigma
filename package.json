@@ -7,6 +7,7 @@
     "dev": "concurrently -k --kill-signal SIGTERM -n server,web -c blue,green \"npm run dev:server\" \"npm run dev:web\"",
     "dev:server": "tsx server/index.ts",
     "dev:web": "vite",
+    "status": "bash scripts/status.sh",
     "stop": "fuser -k 5173/tcp 5174/tcp 2>/dev/null; pkill -f 'tsx .*server/index' 2>/dev/null; pkill -f 'vite' 2>/dev/null; echo stopped",
     "build:web": "vite build",
     "install-cron": "bash scripts/install-cron.sh",

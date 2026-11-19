@@ -101,6 +101,16 @@ To stay reachable over SSH while away, including after a restart nobody logs in 
 npm run install-boot-task      # UAC prompt + Windows password; undo with: npm run uninstall-boot-task
 ```
 
+To see if everything is up, run `npm run status` (also works over SSH). It shows the app URL and ports (web UI on 5173, API on 5174), and if the boot task or a terminal started the app. It also checks tmux, the boot task, Tailscale, SSH, the Windows drive, snapshots and backups, with the command to run for each problem:
+
+```
+  ok    app        open http://127.0.0.1:5173  (API :5174 healthy)
+                   started by the boot task, output in ~/.sigmapi2sigma/app.log
+  ok    tmux       4 sessions: dsu free iso42 ...
+  FAIL  cloud      last sync failed at 2026-11-19T09:20 (last OK: 2026-11-11T09:17)
+                   the login expired. Run: rclone config reconnect PoloGDrive:
+```
+
 [docs/remote-access.md](docs/remote-access.md) explains the whole setup: power settings, Tailscale inside WSL compared with the Windows app, what the task runs and why, how it fits with the login autostart, the password catch with fingerprint/PIN sign-in, and how to test and troubleshoot it.
 
 To set up cloud backup mirroring (one-time):
