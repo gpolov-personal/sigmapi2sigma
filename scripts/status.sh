@@ -65,6 +65,11 @@ fi
 last_boot=$(grep -a 'boot: started' "$DATA_DIR/autostart.log" 2>/dev/null | tail -1 | cut -c1-16)
 if pgrep -f 'scripts/autostart.sh boot' >/dev/null; then
   ok boot-task "running since ${last_boot:-an unknown time}, keeps WSL up"
+  if [ -e "$DATA_DIR/boot-restore" ]; then
+    hint "boot restore on: the next Windows start restores tmux and the app before login"
+  else
+    hint "boot restore off: tmux and the app start at login (npm run boot-restore on)"
+  fi
 elif [ -n "$last_boot" ]; then
   warn boot-task "not running now (last boot run: $last_boot). WSL stops when no window uses it"
 else

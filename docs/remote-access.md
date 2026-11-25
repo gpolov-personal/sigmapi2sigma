@@ -110,13 +110,14 @@ PIN sign-in.
 All output goes to `~/.sigmapi2sigma/autostart.log`, with timestamps.
 
 1. **Checks Tailscale** (`ensure_tailscale`, above).
-2. **Restores tmux, if tmux is empty**, by running `scripts/restore.sh`. This is the
-   same script the Restore button in the web app runs; the button is only a front
-   end for it. Sessions are created detached (`tmux new-session -d`), so no terminal
-   is needed. Claude conversations resume in their panes.
-3. **Starts the app, if it is not already running** (`/api/health` on port 5174):
-   `npm run dev` in the background, through `zsh -ic` so nvm's node is on PATH, with
-   output to `~/.sigmapi2sigma/app.log`.
+2. **Only with boot restore on: restores tmux, if tmux is empty**, by running
+   `scripts/restore.sh`. This is the same script the Restore button in the web app
+   runs; the button is only a front end for it. Sessions are created detached
+   (`tmux new-session -d`), so no terminal is needed. Claude conversations resume in
+   their panes.
+3. **Only with boot restore on: starts the app, if it is not already running**
+   (`/api/health` on port 5174): `npm run dev` in the background, through `zsh -ic`
+   so nvm's node is on PATH, with output to `~/.sigmapi2sigma/app.log`.
 4. **`exec sleep infinity`**, so the task never finishes.
 
 Why each step is the way it is:
@@ -134,11 +135,54 @@ Why each step is the way it is:
   still running `sleep`, so WSL, and with it Tailscale and SSH, stays up. This also
   means closing Windows Terminal no longer shuts WSL down.
 
+### Boot restore: on or off
+
+Boot restore is a switch for steps 2 and 3. It is **off by default**.
+
+```bash
+npm run boot-restore        # show the current state
+npm run boot-restore on     # before a long absence
+npm run boot-restore off    # for daily use
+```
+
+The switch is the file `~/.sigmapi2sigma/boot-restore`. A change applies at the next
+Windows start. `npm run status` shows the state on the `boot-task` line.
+
+| | Off (default) | On |
+|---|---|---|
+| WSL, Tailscale and SSH before login | yes | yes |
+| Tmux and the app before login | no. They start when you log in | yes |
+| After SSH with nobody logged in | run `npm run restore`, then `tmux attach` | `tmux attach` |
+| Image paste and Windows programs in tmux | work | do not work |
+
+Why it is off by default: the task runs in Windows session 0, the session for
+services. A tmux server started there gives each pane the `WSL_INTEROP` socket of
+that session. Each Windows program started from a pane (`powershell.exe`,
+`clip.exe`, `explorer.exe`) then runs in session 0 too. Session 0 has its own empty
+clipboard and no desktop. The result: image paste in Claude Code stops (the
+`wsl-screenshot-cli` daemon reads the wrong clipboard), and GUI programs do not
+show. A tmux server started from a login tab does not have this problem.
+
+The same limit applies if you run `npm run restore` over SSH and log in to Windows
+later: that tmux server did not start from your desktop session. To get the
+clipboard back, save your work, run `tmux kill-server`, then open the tmux tab again
+(it restores the latest snapshot).
+
 ### How the two startups fit together
 
 There is only one Ubuntu. The task and your terminals share it, as the same user.
 
-**Restart, nobody logs in:**
+**A normal day, boot restore off:**
+
+```
+Windows starts ─► task runs autostart.sh boot ─► Tailscale ✓
+                                                └─► sleep infinity (keeps WSL up)
+you log in ─► Startup shortcut opens Windows Terminal:
+                tab 1  autostart.sh app       runs npm run dev
+                tab 2  autostart.sh sessions  tmux is empty → restores, attaches
+```
+
+**Restart with boot restore on, nobody logs in:**
 
 ```
 Windows starts ─► task runs autostart.sh boot ─► Tailscale ✓  tmux restored ✓  app ✓
@@ -146,19 +190,10 @@ Windows starts ─► task runs autostart.sh boot ─► Tailscale ✓  tmux res
 login screen … you SSH in from elsewhere ─► tmux attach
 ```
 
-**A normal day, you log in:**
-
-```
-Windows starts ─► task: same as above, before you reach the login screen
-you log in ─► Startup shortcut opens Windows Terminal:
-                tab 1  autostart.sh app       app already running → prints that, gives a shell
-                                              (app output: tail -f ~/.sigmapi2sigma/app.log)
-                tab 2  autostart.sh sessions  tmux has sessions → skips restore, attaches
-```
-
-The only visible difference from before the task is that the app's output is in
-`app.log` instead of tab 1. Running the task again by hand is also safe: tmux has
-sessions and the app is up, so it only logs and sleeps.
+If you log in after that, both tabs skip what is already done. Tab 1 prints that the
+app is running (its output is in `~/.sigmapi2sigma/app.log`) and gives a shell. Tab 2
+attaches to the sessions that exist. Running the task again by hand is also safe: it
+only logs and sleeps.
 
 ### Install, check, remove
 
@@ -242,6 +277,7 @@ and prints the command to run for each problem.
 | `windows  /mnt/c gives an error` in `npm run status` | WSL cannot read the Windows drive, so `powershell.exe`, `explorer.exe` and `npm run install-autostart` fail. The app, tmux and SSH do not need it. A WSL restart can fix it: in PowerShell, `wsl --shutdown`, then `Start-ScheduledTask "WSL at boot"` |
 | SSH times out after a restart | Log in and check `LastTaskResult`. Then `~/.sigmapi2sigma/autostart.log`: no `boot: started` line means the task did not start WSL |
 | `boot: started`, but Tailscale not online | The `tailscale:` line names the fix |
-| SSH works but tmux is empty | The `restore.sh` output just after `boot: started` in `autostart.log` |
+| SSH works but tmux is empty | Normal with boot restore off: run `npm run restore`. With it on, see the `restore.sh` output just after `boot: started` in `autostart.log` |
+| Image paste fails in Claude Code, or Windows programs started in tmux do not show | Tmux started before login. See [Boot restore](#boot-restore-on-or-off) |
 | The app is not answering | `tail -50 ~/.sigmapi2sigma/app.log` |
 | The machine went into standby | Kernel-Power events 506 and 507 (section 1) |

@@ -95,11 +95,15 @@ Each login then opens one Windows Terminal window with two tabs: **sigmapi2sigma
 
 The installer writes only on the Windows side: a `sigmapi2sigma.lnk` shortcut in the Startup folder (`Win+R`, `shell:startup`) and a Windows Terminal [fragment](https://learn.microsoft.com/windows/terminal/json-fragment-extensions) that adds the profile and its icon, so `settings.json` is not edited. Restore output is appended to `~/.sigmapi2sigma/autostart.log`. Claude conversations and plain shells come back in their folders; scrollback and other running programs do not.
 
-To stay reachable over SSH while away, including after a restart nobody logs in after (an update, a company-forced reboot), add a scheduled task that starts WSL at boot and restores the workspace before any login:
+To stay reachable over SSH while away, including after a restart nobody logs in after (an update, a company-forced reboot), add a scheduled task that starts WSL at boot, with Tailscale and SSH, before any login:
 
 ```bash
 npm run install-boot-task      # UAC prompt + Windows password; undo with: npm run uninstall-boot-task
+npm run boot-restore on        # optional, before a long absence: also restore tmux and start the app at boot
+npm run boot-restore off       # the default: tmux and the app start at login
 ```
+
+Keep boot restore off for daily use. Tmux started before login cannot reach your Windows clipboard, so image paste in Claude Code fails (see [remote access](docs/remote-access.md#boot-restore-on-or-off)).
 
 To see if everything is up, run `npm run status` (also works over SSH). It shows the app URL and ports (web UI on 5173, API on 5174), and if the boot task or a terminal started the app. It also checks tmux, the boot task, Tailscale, SSH, the Windows drive, snapshots and backups, with the command to run for each problem:
 

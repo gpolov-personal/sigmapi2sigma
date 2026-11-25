@@ -4,11 +4,19 @@
 #   autostart.sh app       tab 1: the normal `npm run dev`
 #   autostart.sh sessions  tab 2: restore the latest snapshot, then show tmux
 # and the optional "WSL at boot" scheduled task (README) runs it before any login:
-#   autostart.sh boot      no window: the same restore and app, then keep WSL up
+#   autostart.sh boot      no window: check Tailscale, then keep WSL up. With boot
+#                          restore on, also the same restore and app as above.
+#   autostart.sh boot-restore [on|off]   show or set that switch
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 DATA_DIR="$HOME/.sigmapi2sigma"
+# If this file exists, the boot task also restores tmux and starts the app. It is off
+# by default: the boot task runs in Windows session 0, and a tmux server started there
+# gives each pane that session's WSL_INTEROP. Windows programs started from a pane
+# (powershell.exe, clip.exe) then cannot reach the clipboard or the desktop of the
+# user who logs in later, which breaks image paste in Claude Code.
+BOOT_RESTORE_FLAG="$DATA_DIR/boot-restore"
 
 # `wsl.exe --exec` skips the login shell, and tmux draws "_" for UTF-8 without a locale.
 export LANG="${LANG:-C.UTF-8}"
@@ -76,28 +84,47 @@ case "${1:-}" in
     ;;
   boot)
     # No terminal and possibly no Windows login: a restart nobody is at should still
-    # leave the machine reachable over SSH with the workspace ready. A later login is
-    # unaffected, because both tabs above skip what is already done. Restore comes
-    # before the app so that an app that fails to start cannot cost the sessions.
+    # leave the machine reachable over SSH. By default the workspace waits for the
+    # login tabs above (see BOOT_RESTORE_FLAG). With boot restore on, it is restored
+    # here, and a later login skips what is already done. Restore comes before the app
+    # so that an app that fails to start cannot cost the sessions.
     exec >>"$DATA_DIR/autostart.log" 2>&1 </dev/null
     echo "boot: started" | stamp
     ensure_tailscale | stamp
-    restore_if_empty
-    if app_running; then
-      echo "boot: app already running" | stamp
+    if [ ! -e "$BOOT_RESTORE_FLAG" ]; then
+      echo "boot: boot restore is off, tmux and the app start at login" | stamp
     else
-      # Outside tmux, or every snapshot would capture it and a restore would bring it
-      # back as an idle shell. setsid gives it its own session, so it does not depend
-      # on this script. Stop it with: pkill -f "concurrently.*dev:server"
-      echo "boot: starting app, output in $DATA_DIR/app.log" | stamp
-      (cd "$REPO" && setsid zsh -ic 'exec npm run dev' >>"$DATA_DIR/app.log" 2>&1 </dev/null &)
+      restore_if_empty
+      if app_running; then
+        echo "boot: app already running" | stamp
+      else
+        # Outside tmux, or every snapshot would capture it and a restore would bring
+        # it back as an idle shell. setsid gives it its own session, so it does not
+        # depend on this script. Stop it with: pkill -f "concurrently.*dev:server"
+        echo "boot: starting app, output in $DATA_DIR/app.log" | stamp
+        (cd "$REPO" && setsid zsh -ic 'exec npm run dev' >>"$DATA_DIR/app.log" 2>&1 </dev/null &)
+      fi
     fi
     # WSL shuts down once nothing launched through wsl.exe is left; this keeps it,
     # and with it tailscaled and sshd, running.
     exec sleep infinity
     ;;
+  boot-restore)
+    case "${2:-}" in
+      on)  touch "$BOOT_RESTORE_FLAG" ;;
+      off) rm -f "$BOOT_RESTORE_FLAG" ;;
+      "")  ;;
+      *)   echo "usage: autostart.sh boot-restore [on|off]" >&2; exit 2 ;;
+    esac
+    if [ -e "$BOOT_RESTORE_FLAG" ]; then
+      echo "boot restore: on. At the next Windows start, the boot task restores tmux and starts the app before any login."
+      echo "Image paste and other Windows programs do not work in those tmux panes. Turn it off with: npm run boot-restore off"
+    else
+      echo "boot restore: off. The boot task only keeps WSL, Tailscale and SSH up. Tmux and the app start at login."
+    fi
+    ;;
   *)
-    echo "usage: autostart.sh app|sessions|boot" >&2
+    echo "usage: autostart.sh app|sessions|boot|boot-restore [on|off]" >&2
     exit 2
     ;;
 esac
